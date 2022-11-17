@@ -1,0 +1,119 @@
+---
+title: "Predictive modeling of claims status"
+author: 'Kunxiao Gao, Hannah Li, Allester Ramayrat, Anni Li, Dan Le'
+date: today
+---
+
+### Abstract
+
+> *Header and paragraph content was scraped from the raw webpages and processed into term frequencies of word tokens. For binary classification, a netural network yielded an estimated 78.92% accuracy; for multiclass classification, a support vector machine gave 79.39% accuracy.*
+
+
+### Preprocessing
+
+-   We stripped HTML and extracted the text of headers and the text of paragraphs together.
+
+-   We collapsed the list into one long character string containing all the paragraph text and header text. Then, we removed URLs, email addresses and non-letters like punctuation, numbers, and special characters. We also added spaces before capital letters and removed extra whitespace. Finally, we replaced all capital letters with lower case letters and got the cleaned text.
+
+-   We broke the string of text of each document into single tokens. Then, we removed the stopwords and grouped word inflections into single forms with lemmatization. To represent them quantitatively, we computed the frequency measure for each token, which is the product of term frequency and inverse document frequency. Finally, we reduced the dimension by projecting the predictor onto a subspace, retaining 70% of total variance.
+
+### Methods
+
+For both binary and multiclass classification, we used SVM to train the prediction model. In the binary approach, the radial kernel performs the best, with scaling applied and 35 cost. In the multiclass approach, similarly, the radial kernel is selected, with scaling applied, but 40 cost. 
+
+In order to tarin the model, the function svm() from package e1071 is used.
+
+
+### Results
+The prediction results for both binary and multiclass approach is shown below:
+
+    Confusion Matrix and Statistics (binary)
+
+                           
+    pred_test_b                 N/A: No relevant content. Relevant claim content
+    N/A: No relevant content.                       150                     44
+    Relevant claim content                           46                    187
+                                                   
+               Accuracy : 0.7892                   
+                 95% CI : (0.7474, 0.827)          
+    No Information Rate : 0.541                    
+    P-Value [Acc > NIR] : <2e-16                   
+                                                   
+                  Kappa : 0.5753                   
+                                                   
+     Mcnemar's Test P-Value : 0.9161                   
+                                                   
+            Sensitivity : 0.7653                   
+            Specificity : 0.8095                   
+         Pos Pred Value : 0.7732                   
+         Neg Pred Value : 0.8026                   
+             Prevalence : 0.4590                   
+         Detection Rate : 0.3513                   
+         Detection Prevalence : 0.4543                   
+         Balanced Accuracy : 0.7874                   
+                                                   
+       'Positive' Class : N/A: No relevant content.
+                                                   
+    Confusion Matrix and Statistics (muticlass)
+                               
+    pred_test_m                     N/A: No relevant content. Physical Activity
+    N/A: No relevant content.                           160                18
+    Physical Activity                                     6                36
+    Possible Fatality                                    14                 0
+    Potentially unlawful activity                        10                 0
+    Other claim content                                   6                 0
+                               
+    pred_test_m                     Possible Fatality Potentially unlawful activity
+    N/A: No relevant content.                    10                             9
+    Physical Activity                             0                             0
+    Possible Fatality                            69                             0
+    Potentially unlawful activity                 2                            65
+    Other claim content                           1                             0
+                               
+    pred_test_m                     Other claim content
+    N/A: No relevant content.                      10
+    Physical Activity                               0
+    Possible Fatality                               1
+    Potentially unlawful activity                   1
+    Other claim content                             9
+
+    Overall Statistics
+                                          
+               Accuracy : 0.7939          
+                 95% CI : (0.7524, 0.8313)
+    No Information Rate : 0.459           
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.7029          
+                                          
+    Mcnemar's Test P-Value : NA              
+
+    Statistics by Class:
+
+                          Class: N/A: No relevant content. Class: Physical Activity
+    Sensitivity                                    0.8163                  0.66667
+    Specificity                                    0.7965                  0.98391
+    Pos Pred Value                                 0.7729                  0.85714
+    Neg Pred Value                                 0.8364                  0.95325
+    Prevalence                                     0.4590                  0.12646
+    Detection Rate                                 0.3747                  0.08431
+    Detection Prevalence                           0.4848                  0.09836
+    Balanced Accuracy                              0.8064                  0.82529
+                     Class: Possible Fatality Class: Potentially unlawful activity
+    Sensitivity                            0.8415                               0.8784
+    Specificity                            0.9565                               0.9632
+    Pos Pred Value                         0.8214                               0.8333
+    Neg Pred Value                         0.9621                               0.9742
+    Prevalence                             0.1920                               0.1733
+    Detection Rate                         0.1616                               0.1522
+    Detection Prevalence                   0.1967                               0.1827
+    Balanced Accuracy                      0.8990                               0.9208
+                       Class: Other claim content
+    Sensitivity                             0.42857
+    Specificity                             0.98276
+    Pos Pred Value                          0.56250
+    Neg Pred Value                          0.97080
+    Prevalence                              0.04918
+    Detection Rate                          0.02108
+    Detection Prevalence                    0.03747
+    Balanced Accuracy                       0.70567

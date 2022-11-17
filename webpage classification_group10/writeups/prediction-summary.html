@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.1.189">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Kunxiao Gao, Hannah Li, Allester Ramayrat, Anni Li, Dan Le">
+<meta name="dcterms.date" content="2022-11-14">
+
+<title>Predictive modeling of claims status</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1.6em;
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="prediction-summary_files/libs/clipboard/clipboard.min.js"></script>
+<script src="prediction-summary_files/libs/quarto-html/quarto.js"></script>
+<script src="prediction-summary_files/libs/quarto-html/popper.min.js"></script>
+<script src="prediction-summary_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="prediction-summary_files/libs/quarto-html/anchor.min.js"></script>
+<link href="prediction-summary_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="prediction-summary_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="prediction-summary_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="prediction-summary_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="prediction-summary_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Predictive modeling of claims status</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Kunxiao Gao, Hannah Li, Allester Ramayrat, Anni Li, Dan Le </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">November 14, 2022</p>
+    </div>
+  </div>
+    
+  </div>
+  
+
+</header>
+
+<section id="abstract" class="level3">
+<h3 class="anchored" data-anchor-id="abstract">Abstract</h3>
+<blockquote class="blockquote">
+<p><em>Header and paragraph content was scraped from the raw webpages and processed into term frequencies of word tokens. For binary classification, a netural network yielded an estimated 78.92% accuracy; for multiclass classification, a support vector machine gave 79.39% accuracy.</em></p>
+</blockquote>
+</section>
+<section id="preprocessing" class="level3">
+<h3 class="anchored" data-anchor-id="preprocessing">Preprocessing</h3>
+<ul>
+<li><p>We stripped HTML and extracted the text of headers and the text of paragraphs together.</p></li>
+<li><p>We collapsed the list into one long character string containing all the paragraph text and header text. Then, we removed URLs, email addresses and non-letters like punctuation, numbers, and special characters. We also added spaces before capital letters and removed extra whitespace. Finally, we replaced all capital letters with lower case letters and got the cleaned text.</p></li>
+<li><p>We broke the string of text of each document into single tokens. Then, we removed the stopwords and grouped word inflections into single forms with lemmatization. To represent them quantitatively, we computed the frequency measure for each token, which is the product of term frequency and inverse document frequency. Finally, we reduced the dimension by projecting the predictor onto a subspace, retaining 70% of total variance.</p></li>
+</ul>
+</section>
+<section id="methods" class="level3">
+<h3 class="anchored" data-anchor-id="methods">Methods</h3>
+<p>For both binary and multiclass classification, we used SVM to train the prediction model. In the binary approach, the radial kernel performs the best, with scaling applied and 35 cost. In the multiclass approach, similarly, the radial kernel is selected, with scaling applied, but 40 cost.</p>
+<p>In order to tarin the model, the function svm() from package e1071 is used.</p>
+</section>
+<section id="results" class="level3">
+<h3 class="anchored" data-anchor-id="results">Results</h3>
+<p>The prediction results for both binary and multiclass approach is shown below:</p>
+<pre><code>Confusion Matrix and Statistics (binary)
+
+
+pred_test_b                 N/A: No relevant content. Relevant claim content
+N/A: No relevant content.                       150                     44
+Relevant claim content                           46                    187
+                                               
+           Accuracy : 0.7892                   
+             95% CI : (0.7474, 0.827)          
+No Information Rate : 0.541                    
+P-Value [Acc &gt; NIR] : &lt;2e-16                   
+                                               
+              Kappa : 0.5753                   
+                                               
+ Mcnemar's Test P-Value : 0.9161                   
+                                               
+        Sensitivity : 0.7653                   
+        Specificity : 0.8095                   
+     Pos Pred Value : 0.7732                   
+     Neg Pred Value : 0.8026                   
+         Prevalence : 0.4590                   
+     Detection Rate : 0.3513                   
+     Detection Prevalence : 0.4543                   
+     Balanced Accuracy : 0.7874                   
+                                               
+   'Positive' Class : N/A: No relevant content.
+                                               
+Confusion Matrix and Statistics (muticlass)
+                           
+pred_test_m                     N/A: No relevant content. Physical Activity
+N/A: No relevant content.                           160                18
+Physical Activity                                     6                36
+Possible Fatality                                    14                 0
+Potentially unlawful activity                        10                 0
+Other claim content                                   6                 0
+                           
+pred_test_m                     Possible Fatality Potentially unlawful activity
+N/A: No relevant content.                    10                             9
+Physical Activity                             0                             0
+Possible Fatality                            69                             0
+Potentially unlawful activity                 2                            65
+Other claim content                           1                             0
+                           
+pred_test_m                     Other claim content
+N/A: No relevant content.                      10
+Physical Activity                               0
+Possible Fatality                               1
+Potentially unlawful activity                   1
+Other claim content                             9
+
+Overall Statistics
+                                      
+           Accuracy : 0.7939          
+             95% CI : (0.7524, 0.8313)
+No Information Rate : 0.459           
+P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+                                      
+              Kappa : 0.7029          
+                                      
+Mcnemar's Test P-Value : NA              
+
+Statistics by Class:
+
+                      Class: N/A: No relevant content. Class: Physical Activity
+Sensitivity                                    0.8163                  0.66667
+Specificity                                    0.7965                  0.98391
+Pos Pred Value                                 0.7729                  0.85714
+Neg Pred Value                                 0.8364                  0.95325
+Prevalence                                     0.4590                  0.12646
+Detection Rate                                 0.3747                  0.08431
+Detection Prevalence                           0.4848                  0.09836
+Balanced Accuracy                              0.8064                  0.82529
+                 Class: Possible Fatality Class: Potentially unlawful activity
+Sensitivity                            0.8415                               0.8784
+Specificity                            0.9565                               0.9632
+Pos Pred Value                         0.8214                               0.8333
+Neg Pred Value                         0.9621                               0.9742
+Prevalence                             0.1920                               0.1733
+Detection Rate                         0.1616                               0.1522
+Detection Prevalence                   0.1967                               0.1827
+Balanced Accuracy                      0.8990                               0.9208
+                   Class: Other claim content
+Sensitivity                             0.42857
+Specificity                             0.98276
+Pos Pred Value                          0.56250
+Neg Pred Value                          0.97080
+Prevalence                              0.04918
+Detection Rate                          0.02108
+Detection Prevalence                    0.03747
+Balanced Accuracy                       0.70567</code></pre>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    target: function(trigger) {
+      return trigger.previousElementSibling;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    setTimeout(function() {
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+  function tippyHover(el, contentFn) {
+    const config = {
+      allowHTML: true,
+      content: contentFn,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start'
+    };
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      return note.innerHTML;
+    });
+  }
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const cites = ref.parentNode.getAttribute('data-cites').split(' ');
+    tippyHover(ref, function() {
+      var popup = window.document.createElement('div');
+      cites.forEach(function(cite) {
+        var citeDiv = window.document.createElement('div');
+        citeDiv.classList.add('hanging-indent');
+        citeDiv.classList.add('csl-entry');
+        var biblioDiv = window.document.getElementById('ref-' + cite);
+        if (biblioDiv) {
+          citeDiv.innerHTML = biblioDiv.innerHTML;
+        }
+        popup.appendChild(citeDiv);
+      });
+      return popup.innerHTML;
+    });
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+</body></html>
