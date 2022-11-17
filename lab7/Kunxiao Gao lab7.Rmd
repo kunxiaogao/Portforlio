@@ -1,0 +1,151 @@
+---
+title: "Kunxiao Gao lab7"
+output: pdf_document
+date: "2022-11-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(tidyverse)
+library(lubridate)
+library(modelr)
+library(fda)
+
+url <- 'https://raw.githubusercontent.com/pstat197/pstat197a/main/materials/labs/lab7-curvefitting/data/soiltemp.csv'
+
+soil <- read_csv(url)
+soil %>% head()
+```
+
+```{r}
+# scatterplot of temperatures against day of year
+temp_pts <- soil %>%
+  ggplot(aes(x = day, y = temp)) +
+  geom_point(alpha = 0.1)
+
+temp_pts
+```
+
+```{r}
+temp_pts + 
+  geom_smooth(formula = 'y ~ x',
+              method = 'loess',
+              span = 0.5,
+              se = F)
+##Action:
+temp_pts + 
+  geom_smooth(formula = 'y ~ x',
+              method = 'loess',
+              span = 1,
+              se = F)
+temp_pts + 
+  geom_smooth(formula = 'y ~ x',
+              method = 'loess',
+              span = 0.2,
+              se = F)
+##I think the smaller value can capture the trend best.
+```
+
+```{r}
+# quadratic fit
+temp_pts + 
+  geom_smooth(formula = 'y ~ poly(x, 2)',
+              method = 'lm')
+```
+
+```{r}
+##Action:
+# fit a polynomial model
+fit_poly <- lm(temp ~ poly(day, degree = 13, raw = T),
+               data = soil)
+
+# compute predictions
+pred_df <- tibble(day = 1:365) %>%
+  add_predictions(fit_poly)
+
+# visualize
+temp_pts + 
+  geom_path(data = pred_df, 
+            aes(y = pred),
+            color = 'blue')
+##I think d=13 is the maximum value of degree that could fit the model well without overfitting the model.
+```
+
+```{r}
+# linear spline with a knot at day 200
+fit_spline <- lm(temp ~ day + I((day - 200)*(day > 200)) - 1,
+                 data = soil)
+
+# compute predictions
+pred_df <- tibble(day = 1:365) %>%
+  add_predictions(fit_spline)
+
+# plot it
+temp_pts + 
+  geom_path(data = pred_df, 
+            aes(y = pred),
+            color = 'blue')
+```
+
+```{r}
+##Action:
+# define knot points
+knotpts <- c(130, 200, 300)
+
+# fit an order 3 regression spline with three internal knots
+fit_bs <- lm(temp ~ bs(day, degree = 5, knots = knotpts),
+             data = soil) 
+
+# compute predictions
+pred_df <- tibble(day = 1:365) %>%
+  add_predictions(fit_bs)
+
+# plot it
+temp_pts + 
+  geom_path(data = pred_df, 
+            aes(y = pred),
+            color = 'blue') +
+  geom_vline(xintercept = knotpts, 
+             linetype = 'dashed')
+```
+
+```{r}
+# define knots
+knotpts <- c(100, 200, 300)
+
+# input variable
+x <- 1:365
+
+# calculate basis expansion and plot it
+bs(x, knots = knotpts, degree = 3) %>%
+  as_tibble() %>%
+  bind_cols(x = x) %>%
+  pivot_longer(-x, names_to = 'basis') %>%
+  ggplot(aes(x = x, y = value)) +
+  geom_path(aes(group = basis, color = basis)) +
+  geom_vline(xintercept = knotpts, linetype = 'dashed')
+```
+
+```{r}
+# fit the model with the fourier basis expansion
+fit_fbs <- lm(temp ~ fourier(day, nbasis = 2, period = 365) - 1,
+              data = soil)
+
+# compute predictions
+pred_df <- tibble(day = 1:365*2) %>%
+  add_predictions(fit_fbs)
+
+# plot it
+temp_pts + 
+  geom_path(data = pred_df, 
+            aes(y = pred),
+            color = 'blue')
+```
+
+
+
+
