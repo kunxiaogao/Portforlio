@@ -1,0 +1,73 @@
+---
+title: "hannahli_primary"
+author: "Hannah Li 8264178"
+date: "11/11/2022"
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(tidytext)
+library(keras)
+library(tensorflow)
+library(dplyr)
+#install.packages('e1071')
+library(e1071)
+##Partition the data into training and test sets.
+set.seed(102722)
+partitions <- claims_clean %>% initial_split(prop = 0.8) #run preprocessing
+
+# separate DTM from labels
+test_dtm <- testing(partitions) %>%
+  select(-.id, -bclass, -mclass)
+test_labels <- testing(partitions) %>%
+  select(.id, bclass, mclass)
+
+
+train_dtm <- training(partitions) %>%
+  select(-.id, -bclass, -mclass)
+train_labels <- training(partitions) %>%
+  select(.id, bclass, mclass)
+
+test_text <- testing(partitions) %>%
+  pull(text_clean)
+test_labels <- testing(partitions) %>%
+  pull(bclass) %>%
+  as.numeric() - 1
+
+train_text <- training(partitions) %>%
+  pull(text_clean)
+train_labels <- training(partitions) %>%
+  pull(bclass) %>%
+  as.numeric() - 1
+
+
+fit_svm <- svm(bclass ~ . -.id-mclass, data=training(partitions))
+
+# compute predicted probabilities
+preds <- predict(fit_svm,
+                 data = claims_test,
+                 type = 'C-classification',
+                 kernel = 'linear')
+
+# bind the test labels to the predictions
+# store predictions in a data frame with true labels
+pred_df <- test_labels %>%
+  transmute(bclass = factor(bclass)) %>%
+  bind_cols(pred = as.numeric(preds)) %>%
+  mutate(bclass.pred = factor(pred > 0.5, 
+                              labels = levels(bclass)))
+
+# define classification metric panel 
+panel <- metric_set(sensitivity, 
+                    specificity, 
+                    accuracy, 
+                    roc_auc)
+
+# compute test set accuracy
+pred_df %>% panel(truth = bclass, 
+                  estimate = bclass.pred, 
+                  pred, 
+                  event_level = 'second')
+
+```

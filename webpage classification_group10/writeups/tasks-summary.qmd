@@ -1,0 +1,128 @@
+---
+title: "Summary of exploratory tasks"
+author: 'Kunxiao Gao, Hannah Li, Allester Ramayrat, Anni Li, Dan Le'
+date: 'November 14, 2022'
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+### HTML scraping
+
+In this part, we mainly train the regularized binary logistic model for
+both clean data without headers and with headers, and we finally find
+that including header content could improve predictions. With the
+set.seed of 102722, we split both data with and without headers to
+training set and test set with a proportion of 0.8. For the data set
+without headers, we finally compute the accuracy table with
+sensitivity=0.8513514, specificity=0.7398844, accuracy=0.8025316, and
+roc_auc=0.8562725. For the data set with headers, we finally compute the
+accuracy table with sensitivity=0.844, specificity=0.806,
+accuracy=0.827, and roc_auc=0.886. Except sensitivity, all other three
+values get improvement. Therefore, including header content could
+improve the overall predictions.
+
+### Bigrams
+
+Do bigrams capture additional information relevant to the classification
+of interest? Answer the question, **briefly** describe what analysis you
+conducted to arrive at your answer, and provide quantitative evidence
+supporting your answer.
+
+Bigrams does not capture additional information. We add the predicted
+log-odds value from the word-token logistic prediction model as the new
+variable. Then, we do the same preprocessing but with bigrams token, and
+get PCs retaining 70% variance from the original data. Then, putting the
+PCs and predicted log-odds into a new logistic model, we get the result:
+
+    .metric     .estimator .estimate
+     sensitivity binary         0.445
+     specificity binary         0.905
+     accuracy    binary         0.649
+     roc_auc     binary         0.779
+
+Compared with the word-token logisitic regression model, the new model
+has lower sensitivity, accuracy and roc_auc, but has higher specificity.
+Since the new bigram model doew not perform better than the word-token
+logistic model, we think the bigrams does not capture significant amout
+of additional information relevant to the classification.
+
+### Neural net
+
+*Here is the output of when we run the summary of our model.*
+
+Model: "sequential"
+\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
+Layer (type) Output Shape Param \# Trainable\
+=================================================================================================================
+text_vectorization_1 (TextVectorization) (None, 34686) 1 Y\
+dropout_1 (Dropout) (None, 34686) 0 Y\
+dense_2 (Dense) (None, 35) 1214045 Y\
+dropout (Dropout) (None, 35) 0 Y\
+dense_1 (Dense) (None, 20) 720 Y\
+dense (Dense) (None, 1) 21 Y\
+activation (Activation) (None, 1) 0 Y\
+=================================================================================================================
+Total params: 1,214,787 Trainable params: 1,214,786 Non-trainable
+params: 1
+
+**Flow Chart**
+
+*Let's create a flow chart to better visualize our model.*
+
+```{r, echo=FALSE}
+library(DiagrammeR)
+mermaid("
+graph TB
+  A[Preprocessing Layer TF-IDF n = 34,686]-->|Dropout = 0.3| B[Hidden Layer n = 35]
+  B-->|Dropout = 0.2| C[Hidden Layer n = 20]
+  C-->|Dropout = 0.2| D[Output Layer n = 1]
+")
+```
+
+**Architecture**
+
+Our model utilizes a pre-processing layer of size 34,686, two hidden
+layers of sizes 35 and 25, and an output layer of size 1.
+
+First we run our input through a *pre-processing layer*. This layer
+takes the long text string of the paragraph and header text, and creates
+a TF-IDF matrix with 34,686 terms. In addition, this matrix will be very
+spare (nearly 100%). The dropout from this layer is 0.3.
+
+Then, our model goes through a *hidden layer* of size 35 and then
+another *hidden layer* of size 20 both with a dropout of 0.2.
+
+Lastly, our model ends with an *output layer* of size 1 which will
+return the a binary classifier of whether the page is classified a fraud
+or not.
+
+Our model is using the *sigmoid* activation function for all layers.
+
+**Optimization and Loss**
+
+We configure our model to use *binary cross-entropy* as our loss
+function. We use this because our target probabilities are 0 or 1; thus,
+we are applying penalties to the predicted probabilities based on the
+distance from its expected value.
+
+In addition, we are using *Adam* as our optimizer. Adam is effective for
+our model since it maintains a learning rate per-parameter which is good
+for sparse matrices. From our pre-processing layer we generate a very
+spare TF-IDF matrix; thus, Adam is a good choice as an optimizer.
+
+**Training Epochs**
+
+We ran our model for 5 *epochs.* We found that when running our model
+for longer, we would run int over-fitting since the training accuracy
+continue to approach 1 while our validation accuracy was not improving.
+
+**Predictive Accuracy**
+
+Here's the history plot our model's loss and binary accuracy.
+
+![](nn-history.png){width="400"}
+
+Our model was able to achieve a *binary accuracy* of 0.9316 and a
+*validation binary accuracy* of 0.8016. Which is comparable to the
+accuracy of our logistic regression performed in task 1.

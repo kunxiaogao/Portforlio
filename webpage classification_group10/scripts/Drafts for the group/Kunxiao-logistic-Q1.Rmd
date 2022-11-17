@@ -1,0 +1,160 @@
+---
+title: "Kunxiao Q1"
+output: html_document
+date: "2022-11-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# packages
+library(tidyverse)
+library(tidymodels)
+library(modelr)
+library(Matrix)
+library(sparsesvd)
+library(glmnet)
+
+# path to activity files on repo
+url <- 'https://raw.githubusercontent.com/pstat197/pstat197a/main/materials/activities/data/'
+
+# load a few functions for the activity
+source(paste(url, 'projection-functions.R', sep = ''))
+
+```
+
+```{r}
+# setup
+library(tidyverse)
+library(tidytext)
+library(tokenizers)
+library(textstem)
+library(stopwords)
+url <- 'https://raw.githubusercontent.com/pstat197/pstat197a/main/materials/labs/lab5-text/data/drseuss.txt'
+
+# read data
+seuss_lines <- read_lines(url, skip_empty_rows = T)
+```
+
+```{r}
+# function to apply to claims data
+
+nlp_fn <- function(parse_data.out){
+  out <- parse_data.out %>% 
+    unnest_tokens(output = token, 
+                  input = text_clean, 
+                  token = 'words',
+                  stopwords = str_remove_all(stop_words$word, 
+                                             '[[:punct:]]')) %>%
+    mutate(token.lem = lemmatize_words(token)) %>%
+    filter(str_length(token.lem) > 2) %>%
+    count(.id, bclass,mclass, token.lem, name = 'n') %>%
+    bind_tf_idf(term = token.lem, 
+                document = .id,
+                n = n) %>%
+    pivot_wider(id_cols = c('.id', 'bclass','mclass'),
+                names_from = 'token.lem',
+                values_from = 'tf_idf',
+                values_fill = 0)
+  return(out)
+}
+```
+
+```{r}
+load("C:/Users/User/Documents/GitHub/claims-group-10/data/claims-clean-example.RData")
+claims <- nlp_fn(claims_clean)
+# partition data
+set.seed(102722)
+partitions <- claims %>% initial_split(prop = 0.8)
+
+# separate DTM from labels
+test_dtm <- testing(partitions) %>%
+  select(-.id, -bclass, -mclass)
+test_labels <- testing(partitions) %>%
+  select(.id, bclass, mclass)
+
+# same, training set
+train_dtm <- training(partitions) %>%
+  select(-.id, -bclass, -mclass)
+train_labels <- training(partitions) %>%
+  select(.id, bclass, mclass)
+```
+```{r}
+##Projection:
+# find projections based on training data
+proj_out <- projection_fn(.dtm = train_dtm, .prop = 0.7)
+train_dtm_projected <- proj_out$data
+
+# how many components were used?
+proj_out$n_pc
+```
+
+```{r}
+train <- train_labels %>%
+  transmute(bclass = factor(bclass)) %>%
+  bind_cols(train_dtm_projected)
+
+# store predictors and response as matrix and vector
+x_train <- train %>% select(-bclass) %>% as.matrix()
+y_train <- train_labels %>% pull(bclass)
+
+# fit enet model
+alpha_enet <- 0.3
+fit_reg <- glmnet(x = x_train, 
+                  y = y_train, 
+                  family = 'binomial',
+                  alpha = alpha_enet)
+
+# choose a strength by cross-validation
+set.seed(102722)
+cvout <- cv.glmnet(x = x_train, 
+                y = y_train, 
+                family = 'binomial',
+                alpha = alpha_enet)
+
+# store optimal strength
+lambda_opt <- cvout$lambda.min
+
+# view results
+cvout
+```
+
+```{r}
+##Prediction
+# project test data onto PCs
+test_dtm_projected <- reproject_fn(.dtm = test_dtm, proj_out)
+
+# coerce to matrix
+x_test <- as.matrix(test_dtm_projected)
+
+# compute predicted probabilities
+preds <- predict(fit_reg, 
+                 s = lambda_opt, 
+                 newx = x_test,
+                 type = 'response')
+```
+
+```{r}
+# store predictions in a data frame with true labels
+pred_df <- test_labels %>%
+  transmute(bclass = factor(bclass)) %>%
+  bind_cols(pred = as.numeric(preds)) %>%
+  mutate(bclass.pred = factor(pred > 0.5, 
+                              labels = levels(bclass)))
+
+# define classification metric panel 
+panel <- metric_set(sensitivity, 
+                    specificity, 
+                    accuracy, 
+                    roc_auc)
+
+# compute test set accuracy
+pred_df %>% panel(truth = bclass, 
+                  estimate = bclass.pred, 
+                  pred, 
+                  event_level = 'second')
+```
+
+

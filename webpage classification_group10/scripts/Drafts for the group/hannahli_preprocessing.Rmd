@@ -1,0 +1,143 @@
+---
+title: "hannahli"
+author: "Hannah Li, 8264178"
+date: "2022-11-06"
+output: html_document
+---
+
+```{r }
+## this script contains functions for preprocessing
+## claims data; intended to be sourced 
+require(tidyverse)
+require(tidytext)
+require(textstem)
+require(rvest)
+require(qdapRegex)
+require(stopwords)
+require(tokenizers)
+require(tidyverse)
+require(keras)
+require(tensorflow)
+
+# function to parse html and clean text
+parse_fn_p <- function(.html){
+  read_html(.html) %>%
+    html_elements('p') %>%
+    html_text2() %>%
+    str_c(collapse = ' ') %>%
+    rm_url() %>%
+    rm_email() %>%
+    str_remove_all('\'') %>%
+    str_replace_all(paste(c('\n', 
+                            '[[:punct:]]', 
+                            'nbsp', 
+                            '[[:digit:]]', 
+                            '[[:symbol:]]'),
+                          collapse = '|'), ' ') %>%
+    str_replace_all("([a-z])([A-Z])", "\\1 \\2") %>%
+    tolower() %>%
+    str_replace_all("\\s+", " ")
+}
+
+parse_fn_title <- function(.html){
+  read_html(.html) %>%
+    html_elements('title') %>%
+    html_text2() %>%
+    str_c(collapse = ' ') %>%
+    rm_url() %>%
+    rm_email() %>%
+    str_remove_all('\'') %>%
+    str_replace_all(paste(c('\n', 
+                            '[[:punct:]]', 
+                            'nbsp', 
+                            '[[:digit:]]', 
+                            '[[:symbol:]]'),
+                          collapse = '|'), ' ') %>%
+    str_replace_all("([a-z])([A-Z])", "\\1 \\2") %>%
+    tolower() %>%
+    str_replace_all("\\s+", " ")
+}
+
+
+# function to apply to claims data
+parse_data <- function(.df){
+  out <- .df %>%
+    filter(str_detect(text_tmp, '<!')) %>%
+    rowwise() %>%
+    mutate(text_clean = paste(parse_fn_p(text_tmp), parse_fn_title(text_temp))) %>%
+    unnest(text_clean) 
+  return(out)
+}
+
+nlp_fn <- function(parse_data.out){
+  out <- parse_data.out %>% 
+    unnest_tokens(output = token, 
+                  input = text_clean, 
+                  token = 'words',
+                  stopwords = str_remove_all(stop_words$word, 
+                                             '[[:punct:]]')) %>%
+    mutate(token.lem = lemmatize_words(token)) %>%
+    filter(str_length(token.lem) > 2) %>%
+    count(.id, bclass, token.lem, name = 'n') %>%
+    bind_tf_idf(term = token.lem, 
+                document = .id,
+                n = n) %>%
+    pivot_wider(id_cols = c('.id', 'bclass'),
+                names_from = 'token.lem',
+                values_from = 'tf_idf',
+                values_fill = 0)
+  return(out)
+}
+
+source('scripts/preprocessing.R')
+
+# load raw data
+load('data/claims-raw.RData')
+
+# preprocess (will take a minute or two)
+claims_clean <- claims_raw %>%
+  parse_data()
+
+# export
+#save(claims_clean, file = 'data/claims-clean-example.RData')
+
+nlpcc <- nlp_fn(claims_clean)
+```
+
+
+```{r }
+
+load('/Users/hannahli/Documents/GitHub/claims-group-10/data/claims-test.RData')
+load('/Users/hannahli/Documents/GitHub/claims-group-10/data/claims-raw.RData')
+source('/Users/hannahli/Documents/GitHub/claims-group-10/scripts/preprocessing.R')
+
+tf_model <- load_model_tf('/Users/hannahli/Documents/GitHub/claims-group-10/results/example-model')
+
+# apply preprocessing pipeline
+clean_df <- claims_test %>%
+  slice(1:100) %>%
+  parse_data() %>%
+  select(.id, text_clean)
+
+
+# grab input
+x <- clean_df %>%
+  pull(text_clean)
+
+# compute predictions
+preds <- predict(tf_model, x) %>%
+  as.numeric()
+
+class_labels <- claims_raw %>% pull(bclass) %>% levels()
+
+pred_classes <- factor(preds > 0.5, labels = class_labels)
+
+# export (KEEP THIS FORMAT IDENTICAL)
+pred_df <- clean_df %>%
+  bind_cols(bclass.pred = pred_classes) %>%
+  select(.id, bclass.pred)
+
+save(pred_df, file = '/Users/hannahli/Documents/GitHub/claims-group-10/results/example-preds.RData')
+
+```
+
