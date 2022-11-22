@@ -50,7 +50,7 @@ These five 'core' proteins were then used to train a prediction model to see if 
 
 ### Impact of preprocessing and outliers
 
-#### Log transformation (Kunxiao):
+#### Log transformation:
 
 ```{r warning=FALSE}
 ## Plot the distribution for mean values
@@ -109,7 +109,7 @@ More important, if we want to make regression model with those data in the futur
 
 After removing the trim function from the preprocessing file, and saving the outliers into a separate data frame, our exploratory analysis uncovered a number of surprising results. Almost every subject (except for exactly 2) had at least one associated outlier variable, so simply examining the subjects with associated outlier variables would not be sufficient to reach a conclusion on why the values were trimmed from the dataset, or whether they should be excluded at all. After plotting the data, it can be easily seen that a few subjects exhibit markedly higher number of associated outlier values, so we chose to focus our analysis on these subjects instead. Examining the groups of these subjects, the majority were classed as 'Typically Developing'. However, when we ran the same analysis on all subjects with outliers, the majority were classed ASD. Some possible explanations for this are that the subjects classed ASD are more prone to higher levels of characteristic proteins, in which case trimming the outliers may actually hinder our analysis.
 
-### Methodological variations (Allen Wang)
+### Methodological variations
 
 In the task 3, we modify some procedures we have done in the lecture to see how they influence the final result. First, we split the biomarker_clean data set into a 80 percent of training set and a 20 percent of testing set. Then, we repeat multiple t-tests, correlation test with 'ados', and random forests to select significant proteins to predict whether a person is ASD or not.
 
