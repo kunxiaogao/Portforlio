@@ -1,0 +1,233 @@
+---
+title: "Biomarkers of ASD"
+subtitle: "Group 9"
+author: "Kunxiao Gao, Alexis Navarra, Sammy Sullivan, Allen Wang"
+date: last-modified
+published-title: "Updated"
+editor: visual
+format: html
+code-copy: true
+execute:
+  message: false
+  warning: false
+  echo: false
+  cache: true
+---
+
+```{r, echo=FALSE}
+# load any other packages and read data here
+library(tidyverse)
+```
+
+## Abstract
+
+In this report, we will mainly study the impact of preprocessing and outliers and methodlogical variations. In the preprocessing part, we mainly want to apply log transformation on the raw data to get the clean data. Log transformation could help us transform our data from an highly skewed distribution to a normal distribution, also decreasing the range of the data set. By doing so, we could decrease the prediction errors when we are doing the regression model.
+
+To study the impact of outliers, we removed the trimming function and performed exploratory analysis on the outliers. This displayed that the outliers were largely biased towards the ASD group.
+
+In order to find an improved classifier (panel of proteins to predict ASD), we fit a Lasso regression model to the data. This resulted in an alternative panel of 50 proteins with comparable classification accuracy to the in-class analysis of the study.
+
+## Dataset
+
+```{r}
+load("biomarker-raw.RData")
+load("biomarker-clean.RData")
+biomarker_raw
+biomarker_clean
+```
+
+For the raw data, we obtained it from the study: Serum samples from 76 boys with ASD and 78 typically developing (TD) boys, 18 months-8 years of age, were collected. A total of 1,125 proteins were analyzed from each sample, since we measured 1,317 proteins, but 192 of them failed the quality control. However, we don't know which ones failed quality control so will use all of them.
+
+From the raw data, we want to get the clean data and save it as a data frame for future usage. Firstly, we get all of the variable names from the raw data. Then, we divide the raw data according to ASD and TD group, and put the values of each row into different variable columns. At the same time, we apply the trim function to for trimming the outliers in the data set and filter out the data that are not '-' or ''. Finally, we use the log transformation for all variables except group and ados to get the clean data and save it.
+
+## Summary of published analysis
+
+Hewitson et al. used three computational methods in their study to find a panel of proteins with the highest predictive power for ASD. These three methods were: random-forest analysis, a t-test analysis, and a correction analysis with ASD severity. Each of these three methods produced a panel of 10 proteins with the highest predictive power for ASD. To optimize the predictive power of the model, they made the five proteins that were common to all three methods the 'core' proteins: MAPK14, IgD, DERM, EPHB2, and suPAR.
+
+These five 'core' proteins were then used to train a prediction model to see if the remaining 13 'non-core' proteins provided any predictive power when added. Four additional proteins from this test were added to the 'core' proteins because their addition added predictive power to the model. The researchers also examined the impact of ethnicity, age, medications, and other clinical diagnoses to check if any confounding factors affected their results, but found no significant influences. Thus, the final panel of "optimal" proteins consisted of these nine proteins: MAPK14, IgD, DERM, EPHB2, suPAR, ROR1, GI24, e1F-4H, and ARSB.
+
+## Findings
+
+### Impact of preprocessing and outliers
+
+#### Log transformation (Kunxiao):
+
+```{r warning=FALSE}
+## Plot the distribution for mean values
+set.seed(123)
+n <- sample(2:1319,size = 650)
+## Get mean values
+## For raw data
+raw_mean <- biomarker_raw %>% select(all_of(n)) %>% summarise_all(funs(mean),na.rm=TRUE) %>% gather(var, val)
+
+## For clean data
+clean_mean <- biomarker_clean %>% select(all_of(n)) %>% summarise_all(funs(mean),na.rm=TRUE) %>% gather(var, val)
+
+## plot the histograms
+## Raw mean
+hist(raw_mean$val,breaks = 250,xlim = c(0,30000),main = "Histogram of raw_mean")
+
+## Clean mean
+hist(clean_mean$val,main = "Histogram of clean_mean")
+```
+
+```{r}
+##3. Plot the distribution for single variables
+set.seed(1234)
+n2 <- sample(2:1319,size = 5)
+## Get mean values
+## For raw data
+raw_var <- biomarker_raw %>% select(all_of(n2))
+
+## For clean data
+clean_var <- biomarker_clean %>% select(all_of(n2))
+
+## Pull the names
+col.name <- colnames(raw_var)
+
+## plot the histograms for single variable distribution
+for (i in 1:5) {
+  par(mfrow=c(1,2))
+## Raw 
+hist(pull(raw_var[i]),main = rbind(col.name[i],"raw"),xlab=rbind(col.name[i],"raw"))
+## Clean 
+hist(pull(clean_var[i]),main = rbind(col.name[i],"clean"),xlab=rbind(col.name[i],"clean"))
+}
+```
+
+In this part, we mainly draw the histograms to see the distributions of the data before and after log transformations. Then, we try to compare and find the properties of the distributions after log transformation.
+
+In part one, the data are collected from the mean values of 650 random selected variables before and after log transformations. In this case, we want to compare the distributions of the mean values before and after log transformations, which could represents the distribution of the whole data set. According to the two histograms above, it is pretty obvious that the distribution of mean values are highly right skewed. Besides, the range of the distribution is very large even if we set the xlim. However, after log transformation, it is easy to find that the range of clean distribution becomes much smaller (from -0.06 to 0.05), and the distribution are more centered to middle at x=0. Besides, compared to the raw data distribution, the new distribution are not that skewed to the right.
+
+In part two, we mainly random select 5 proteins to see the distribution change of the single variable before and after the log transformation. In this case, we could find how log transformation affect the distribution of single protein level. Very Similar to what we observe for the distributions of mean values above, we could find that the first four raw distribution are skewed to the right with large ranges. For the last variable, CHL1, it also slightly skewed to the right. After log transformation, most new distributions become much likely to standard normal distribution centered at x=0, with range -3 to 3. Only for hnRNP K, its new distribution is still skewed to right because its original distribution is too skewed.
+
+Therefore, it is easy to find that log transformation could help us transform our data from an highly skewed distribution to a normal distribution, also decreasing the range of the data set. There are a lot of advantage to do the log transformation. First of all, after decreasing the range of the data, we could easily cluster the means and variances of different variables to a small range, which could help us easily observe and operate them.
+
+More important, if we want to make regression model with those data in the future, the original data might have some disadvantages. When modeling variables with non-linear relationships, the chances of producing errors may also be skewed negatively. In theory, we want to produce the smallest error possible when making a prediction, while also taking into account that we should not be over fitting the model. Over fitting occurs when there are too many dependent variables in play that it does not have enough generalization of the data set to make a valid prediction.Therefore, the transformed data could effectively decrease the dependency among variables to decrease the chances of over fitting model, and decrease the prediction errors at the same time. Thus, using the transformation of one or more variables improves the fit of the model by transforming the distribution of the features to a more normally-shaped bell curve.
+
+#### Outliers Examination:
+
+After removing the trim function from the preprocessing file, and saving the outliers into a separate data frame, our exploratory analysis uncovered a number of surprising results. Almost every subject (except for exactly 2) had at least one associated outlier variable, so simply examining the subjects with associated outlier variables would not be sufficient to reach a conclusion on why the values were trimmed from the dataset, or whether they should be excluded at all. After plotting the data, it can be easily seen that a few subjects exhibit markedly higher number of associated outlier values, so we chose to focus our analysis on these subjects instead. Examining the groups of these subjects, the majority were classed as 'Typically Developing'. However, when we ran the same analysis on all subjects with outliers, the majority were classed ASD. Some possible explanations for this are that the subjects classed ASD are more prone to higher levels of characteristic proteins, in which case trimming the outliers may actually hinder our analysis.
+
+### Methodological variations (Allen Wang)
+
+In the task 3, we modify some procedures we have done in the lecture to see how they influence the final result. First, we split the biomarker_clean data set into a 80 percent of training set and a 20 percent of testing set. Then, we repeat multiple t-tests, correlation test with 'ados', and random forests to select significant proteins to predict whether a person is ASD or not.
+
+The multiple testing here utilizes t-test to infer the mean difference of each protein variable between "TD" and "ASD" groups: $\delta_i = \mu^i_{ASD} - \mu^i_{TD}$ , where $\mu^i_{ASD}$ is the mean serum level of protein $i$ in the "ASD" group and $\mu^i_{TD}$ is the mean serum level of protein $i$ in the "TD" group. Then, we set $H_{0i}: \delta_i = 0$ and reject this null hypothesis if $|\frac{\hat \delta_i}{SE(\hat \delta_i)} > t_{\alpha}|$. Also, we use the Benjamini-Yekutieli Correction to limit false rejections. After implementing t-tests over 1000 times, we sort the adjusted p-values from smallest to largest to pick top 15 protein variables.
+
+```{r}
+load("t_tests_data.RData")
+t_result_2 %>% head(15)
+```
+
+In the clean dataset, we have a "ADOS" column, which stores scores of ASD severity for ASD patience only. Thus, we want to explore correlations between ADOS scores and all protein variables and find out 15 proteins with the strongest correlation. I adopted the \_SLR\_ approach, in which p-values are derived along correlation coefficients. Here, I present the protein set and visualize those strong correlations. We can see that the absolute values of correlations range from 0.4 to 0.3, so they are significant values.
+
+```{r}
+load("corr_result.RData")
+corr_result_1
+```
+
+For the random forests method, we utilize a binary classification tree, where each tree node is defined by a protein variable. The random forests method builds up lots of trees using bootstrap samples and random subsets of predictors, and then it finds out which protein variables are used more often to define splits. We use variable importance scores to measure this feature, and select top 15 proteins with highest importance scores. We fix hyper-parameters "mtry" to 100 and "ntree" to 1000, and qualified proteins are presented below.
+
+```{r}
+load("random_forest_result.RData")
+rf_out$confusion
+```
+
+```{r}
+rf_proteins %>% knitr::kable()
+```
+
+After that, we pick protein variables that appear at least two time in above protein sets, and we get the following core panel consisting of six proteins. This is the implementation of fuzzy intersection.
+
+```{r}
+load("testing_result.RData")
+core_proteins %>% knitr::kable()
+```
+
+Finally, we can use the core panel to fit a logistic regression model and test the accuracy on the testing set. There are three assumptions for the logistic regression:
+
+1.  Observations are independent
+2.  Probability of event is monotonic in each predictor
+3.  Mean-Variance relationship following Bernoulli distribution
+
+By maximizing the likelihood function, we get the following result.
+
+```{r}
+fit_logistic %>%
+  broom::tidy() %>%
+  knitr::kable()
+```
+
+```{r}
+accuracy_result_q3 
+```
+
+The logistic regression models seems to be good at predicting "TD" group correctly since the specificity is 10% higher than the sensitivity, proportion of "ASD" group that are correctly classified.
+
+### Improved classifier
+
+#### Lasso Regularization
+
+To find a simpler/alternative panel of proteins, we decided to fit a lasso-regression model to the data to see which proteins were most influential to the predictive power of the model. A summary of our method to fit this model is as follows:
+
+-   Partitioned the data into response and classifier training and testing data sets.
+
+-   Fit a lasso-regression model and performed cross validation.
+
+-   Found an optimal value of lambda and observed how it affected the MSE of our model's prediction (see plot below).
+
+-   Displayed lasso regression coefficients associated with the best value of lambda (0.038).
+
+Most of our lasso regression coefficients were zero. Any zero coefficients demonstrated that the associated protein did not have predictive power in our model. So the proteins relating to the non-zero coefficients will be the proteins that have predictive power in the panel for predicting ASD. The non-zero coefficients are displayed below:
+
+```{r, echo=FALSE}
+library(glmnet)
+# load in clean data
+biomarker_clean_noAdos = biomarker_clean %>% select(-ados) 
+biomarker <- biomarker_clean_noAdos %>%
+  mutate(class = as.numeric(group == 'ASD'))
+
+# partition
+x <- biomarker %>%
+  select(-group, -class) %>%
+  as.matrix()
+y <- biomarker %>%
+  pull(class)
+
+# create training and testing datasets
+set.seed(1234)
+train = sample(1:nrow(x), 123)
+test = (-train)
+
+x.train = x[train,]
+y.train = y[train]
+x.test = x[test,]
+y.test = y[test]
+
+# perform cross-validation to get test error
+cv.out.lasso = cv.glmnet(x.train, y.train, alpha = 1) 
+plot(cv.out.lasso)
+abline(v = log(cv.out.lasso$lambda.min), col="red", lwd=3, lty=2)
+
+# get best value of lambda and test mse
+bestlam = cv.out.lasso$lambda.min
+
+# get coefficient values from best lambda
+out=glmnet(x,y,alpha=1,lambda = bestlam) 
+coef <- coef(out)[,1]
+coef_df <- as.data.frame(coef)
+panel <- coef_df %>% filter(coef_df != 0)
+panel
+
+# get the accuracy of our prediction model by finding mse
+lasso.pred = predict(out, s=bestlam, newx=x.test) 
+test.mse = mean((lasso.pred-y.test)^2)
+paste("The testing MSE is: ", test.mse)
+```
+
+Thus, from the results of fitting a lasso regression model to the data, we found the above panel of 50 proteins as influential in predicting ASD.
+
+We can observe the prediction accuracy of our lasso regression model by calculating the test MSE, which is relatively low (0.106). This shows us that the model is fairly accurate in predicting which proteins are most influential in predicting ASD, and our findings are of comparible classification accuracy to the in-class analysis.
+
+Additionally, compared to the results of the in-class analysis, our panel is larger and much broader, which might be better in avoiding overfit of the data and applying our findings to more general conclusions.

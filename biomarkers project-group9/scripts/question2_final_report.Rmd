@@ -1,0 +1,136 @@
+---
+title: "sammy_question2"
+output: html_document
+date: "2022-10-30"
+---
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+Obtaining variable names from original csv file:
+
+```{r error = FALSE}
+var_names <- read_csv('data/biomarker-raw.csv', 
+                      col_names = F, 
+                      n_max = 2, 
+                      col_select = -(1:2)) %>%
+  t() %>%
+  as_tibble() %>%
+  rename(name = V1, 
+         abbreviation = V2) %>%
+  na.omit()
+```
+
+Read in raw csv file, clean dataset, and perform log transformation
+```{r error=FALSE}
+biomarker_clean <- read_csv('data/biomarker-raw.csv', 
+                            skip = 2,
+                            col_select = -2L,
+                            col_names = c('group', 
+                                          'empty',
+                                          pull(var_names, abbreviation),
+                                          'ados'),
+                            na = c('-', '')) %>%
+  filter(!is.na(group)) %>%
+  mutate(across(.cols = -c(group, ados))) %>%
+  select(group, ados, everything())
+```
+
+Define log-scaling function to apply to cleaned data
+
+```{r error = FALSE}
+scale_fn <- function(.x){
+  scale(log10(.x))[, 1]
+}
+```
+
+Now instead of trimming outlier values, defined as those rows having absolute value of level greater than 3, we will save them in a new dataframe
+
+```{r error = FALSE}
+biomarker_outliers <- biomarker_clean %>%
+  mutate(across(.cols = -c(group, ados), 
+                scale_fn),
+         subject = row_number()) %>%
+  pivot_longer(cols = -c(group, ados, subject),
+               names_to = 'variable',
+               values_to = 'level')
+  
+biomarker_outliers2 <- biomarker_outliers %>%
+  filter(abs(biomarker_outliers['level']) > 3)
+```
+
+Now we will perform a groupby operation to see which subject recorded the most outliers
+
+```{r error = FALSE}
+outlier_subjects <- biomarker_outliers2 %>%
+  group_by(subject) %>%
+  count()
+
+max(outlier_subjects)
+```
+
+Let's plot the number of outliers per subject to spot any notable trends
+
+```{r error = FALSE}
+p<-ggplot(data=outlier_subjects, aes(x=subject, y=n)) +
+  geom_bar(stat="identity") 
+p
+```
+It appears that there are some subjects that have a notably high total of outlier values associated with them. Let's try to isolate them:
+
+```{r error = FALSE}
+outlier_subjects2 <- outlier_subjects %>%
+  filter(n > 50)
+
+table(outlier_subjects2)
+```
+
+So all these "super-outlier" subjects come from diff subjects. Let's find the group of the subject with the maximum number of "super-outlier" observations:
+
+```{r error = FALSE}
+maximum <- max(outlier_subjects2$n)
+max_row_num <- which(outlier_subjects2$n == maximum)
+subject_num <- outlier_subjects2$subject[max_row_num]
+biomarker_outliers2$group[biomarker_outliers2$subject == subject_num][1]
+```
+
+Let's write a function so that we can repeat this process to find the groups of all subjects with an abnormally high number of outliers and tabulate our results.
+
+```{r error = FALSE}
+find_group <- function(x){
+  y <- which(outlier_subjects2$n == x)
+  z <- outlier_subjects2$subject[y]
+  biomarker_outliers2$group[biomarker_outliers2$subject == z][1]
+}
+
+outlier_groups <- outlier_subjects2[,2] %>%
+  apply(FUN = find_group, MARGIN = 1)
+
+table(outlier_groups)
+```
+
+So for the subjects that have an abnormally high number of outlier variables associated with them, the majority are typically developing. Let's perform this operation again on the entire dataframe of subjects with outlier variables associated with them.
+
+```{r error=FALSE}
+find_group2 <- function(x){
+  y <- which(outlier_subjects$n == x)
+  z <- outlier_subjects$subject[y]
+  biomarker_outliers2$group[biomarker_outliers2$subject == z][1]
+}
+
+outlier_subjects3 <- outlier_subjects[,2] %>%
+  apply(FUN = find_group2, MARGIN = 1)
+
+table(outlier_subjects3)
+```
+
+Surprisingly, we now see that the subjects who recorded outliers trend towards being a part of the ASD group.
+
+```{r error = FALSE}
+save(list = 'biomarker_clean', 
+     file = 'data/biomarker-clean.RData')
+```
+
