@@ -1,0 +1,29 @@
+---
+title: "Q3_report_draft"
+author: "Allen Wang"
+date: "2022-10-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Q3 
+
+In the question 3, we modify some procedures we have done in the lecture to see how they influence the final result. First, we split the _biomarker_clean_ data set into a 80 percent of training set and a 20 percent of testing set. Then, we repeat multiple t-tests, correlation test with 'ados', and random forests to select significant proteins to predict whether a person is ASD or not.
+
+### multiple testing
+The multiple testing here utilizes t-test to infer the mean difference of each protein variable between "TD" and "ASD" groups: $\delta_i = \mu^i_{ASD} - \mu^i_{TD}$, where $\mu^i_{ASD}$ is the mean serum level of protein $i$ in the "ASD" group and $\mu^i_{TD}$ is the mean serum level of protein $i$ in the "TD" group. Then, we set $H_{0i}: \delta_i = 0$ and reject this null hypothesis if $|\frac{\hat \delta_i}{SE(\hat \delta_i)} > t_{\alpha}|$. Also, we use the _Benjamini-Yekutieli_ Correction to limit false rejections. After implementing t-tests over 1000 times, we sort the adjusted p-values from smallest to largest to pick top 15 protein variables.
+
+
+### Correlation with ADOS
+In the clean dataset, we have a "ADOS" column, which stores scores of ASD severity for ASD patience only. Thus, we want to explore correlations between ADOS scores and all protein variables and find out 15 proteins with the strongest correlation. I adopted the _SLR_ approach, in which p-values are derived along correlation coefficients. Here, I present the  protein set and visualize those strong correlations. We can see that the absolute values of correlations range from 0.4 to 0.3, so they are significant values. 
+
+### Random Forests 
+In this method, we utilize the binary classification tree, where each tree node is defined by a protein variable. The random forests method builds up lots of trees using bootstrap samples and random subsets of predictors, and then it finds out which protein variables are used more often to define splits. We use variable importance scores to measure this feature, and select top 15 proteins with highest importance scores. Qualified proteins are presented below.
+
+
+
+
+

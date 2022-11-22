@@ -1,0 +1,307 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(tidymodels)
+library(tidyverse)
+library(modelr)
+library(rsample)
+library(yardstick)
+```
+
+```{r}
+# load the dataset
+wd <- dirname(getwd())
+load(paste(wd, "/data/biomarker-clean.Rdata", sep = ""))
+```
+
+```{r}
+biomarker_clean_noAdos = biomarker_clean %>% select(-ados) 
+```
+
+## Split the data 
+
+```{r}
+# for reproducibility
+set.seed(28292)
+
+# partition data
+partitions <- biomarker_clean %>%
+  initial_split(prop = 0.8, strata = group)
+
+# examine
+asd_training = training(partitions)
+asd_testing = testing(partitions)
+```
+
+
+
+## T-tests
+$\mu^i_{ASD}$: mean serum level of protein $i$ in the ASD group 
+
+$\mu^i_{TD}$: mean serum level of protein $i$ in the TD group
+
+$\delta_i$: difference between $\mu^i_{ASD}$ - $\mu^i_{TD}$
+
+Assumptions: 
+
+$p$-values for a test is the probability of obtaining a sample at least as contrary to $H_{0i}$ as the sample in hand, assuming $H_{0i}$ is true.
+
+
+
+Use **bonferroni correction**
+  need explanation 
+
+```{r}
+asd_nested <- asd_training %>%
+  select(-ados) %>%
+  pivot_longer(-group, 
+               names_to = 'protein', 
+               values_to = 'level') %>%
+  nest(data = c(level, group))
+```
+
+```{r}
+tt_fn <- function(.df){
+  infer::t_test(.df, 
+                formula = level ~ group,
+                order = c('ASD', 'TD'),
+                alternative = 'two-sided',
+                var.equal = F)
+}
+
+n_tests <- nrow(asd_nested)
+
+tt_out <- asd_nested %>%
+  slice(1:n_tests) %>%
+  mutate(ttest = map(data, tt_fn))
+```
+
+```{r}
+test <-tt_out %>% 
+  unnest(ttest) %>%
+  select(protein, p_value) %>%
+  arrange(p_value)
+```
+
+```{r}
+t_result_2 <- test %>% 
+  add_column(rank = 1:nrow(test)) %>%
+  arrange(p_value) %>%
+  mutate(m = n(),
+         hm = log(m) + 1/(2*m) - digamma(1),
+         rank = row_number(),
+         p.adj = m*hm*p_value/rank)
+
+t_test_proteins <- t_result_2 %>% 
+  slice_min(p.adj, n = 15) %>%
+  pull(protein)
+#t_result_2 %>% filter(p_adj < 0.01) %>% select(protein) 
+t_result_2
+```
+```{r}
+t_test_proteins
+```
+```{r}
+# save t_tests result
+
+save(t_result_2, t_test_proteins, file = "t_tests_data.RData")
+```
+
+
+
+## Correlation Approach 
+
+
+1. compute correlations of each protein with ADOS 
+2. pick 15 proteins with the strongest correlation
+
+**Need to explain following questions**
+1. How do we utilize _ADOS_ score  
+    ADOS scores: determined by psychological assessment and measure ASD severity.  
+    6-23; measured for ASD group
+    
+
+```{r}
+cor_test <- function(x, y){
+  cor_out <- cor.test(x, y)
+  tibble(estimate = cor_out$estimate,
+         p.value = cor_out$p.value)
+}
+
+# use train_data
+corr_result <- asd_training %>% select(-group) %>%
+  pivot_longer(cols = -ados,
+               names_to = 'protein',
+               values_to = 'level') %>%
+  group_by(protein) %>%
+  summarize(correlation = cor_test(ados, level)) %>%
+  unnest(correlation) %>%
+  arrange(p.value)
+
+corr_result_1 <- corr_result %>% head(15)
+corr_result_1
+```
+
+```{r}
+save(corr_result_1,corr_proteins, file = "corr_result.RData")
+```
+
+
+### Visual Assessment
+
+```{r}
+corr_proteins <- corr_result_1 %>% pull(protein)
+corr_proteins
+```
+
+```{r}
+a <- biomarker_clean %>% select(ados, all_of(corr_proteins))
+```
+```{r}
+#pairs(ados ~ ., data = a)
+```
+
+
+
+## Random Forest 
+
+We can control
+1. number of trees T
+2. number of predictors $m$ to choose at random for each tree
+3. bootstrap sample size and method 
+4. tree depth 
+
+maybe doing hyperparameter later 
+
+
+choose splits that optimize quantitative measures of _node homogeneity_
+
+```{r}
+library(randomForest)
+# reproducibility
+set.seed(101422)
+
+# fit rf
+
+asd_train_noados <- asd_training %>% select(-ados)
+
+train_preds <- asd_train_noados %>% select(-group)
+train_resp <- asd_train_noados %>% select(group)
+train_resp$group <- as.factor(train_resp$group)
+
+
+rf_out <- randomForest(x = train_preds, y = train_resp$group,
+                       mtry = 100, ntree = 1000, 
+                       importance = T)
+```
+
+
+```{r}
+rf_proteins <- rf_out$importance %>% 
+  as_tibble() %>%
+  mutate(protein = rownames(rf_out$importance)) %>%
+  slice_max(MeanDecreaseGini, n = 15) %>%
+  pull(protein)
+
+rf_proteins
+```
+
+```{r}
+save(rf_proteins, rf_out, file = "random_forst_result.RData")
+```
+
+
+## Choosing Core Panel 
+
+```{r}
+s1 <- intersect(t_test_proteins, corr_proteins)
+s2 <- intersect(t_test_proteins, rf_proteins)
+s3 <- intersect(rf_proteins, corr_proteins)
+
+core_proteins <- s1 %>% union(s2) %>% union(s3)
+core_proteins
+```
+Above is our core panel. 
+
+```{r}
+save(core_proteins, core_biomarker_clean, fit_logistic,
+     confusion_table, accuracy_result_q3, file = "testing_result.RData")
+```
+
+
+## Constructing Logistic Regression 
+Assumptions:
+1. Observations are independent 
+2. Probability of event is monotonic in each predictor
+3. Mean-variance relationship following Bernoulli distribution
+
+How to show above?
+
+
+Maximum likelihood: find the parameter values for which the joint probability of the data is greatest according to the model.
+
+
+```{r}
+core_biomarker_clean <- asd_train_noados %>%
+  select(group, all_of(core_proteins)) %>%
+  mutate(is_asd = (group == 'ASD')) %>%
+  select(-group) 
+
+core_biomarker_clean
+```
+
+```{r}
+# fit the logistic regression model
+fit_logistic <- glm(is_asd ~ .,
+                    family = 'binomial',
+                    data = core_biomarker_clean)
+
+fit_logistic %>%
+  broom::tidy() %>%
+  knitr::kable()
+
+```
+
+
+```{r}
+confusion_table <- asd_testing %>% select(-ados) %>%
+  modelr::add_predictions(fit_logistic, type = 'response') %>%
+  mutate(pred_class = pred > 0.5) %>%
+  select(group, pred_class) %>%
+  mutate_all(~factor(.x, labels = c('TD', 'ASD'))) %>%
+  table()
+
+confusion_table
+```
+
+```{r}
+library(yardstick)
+# evaluate errors on test set
+class_metrics <- metric_set(sensitivity, specificity, accuracy, roc_auc)
+
+accuracy_result_q3 <- asd_testing %>% 
+  modelr::add_predictions(fit_logistic, type = 'response') %>%
+  class_metrics(estimate = factor(pred > 0.5),
+                truth = factor(group == "ASD"),
+                pred,
+                event_level = 'second') #%>%
+  #knitr::kable()
+
+
+accuracy_result_q3
+
+```
+
+### ROC curve 
+
+
+```{r}
+a = asd_testing %>% select(-ados) %>%
+  modelr::add_predictions(fit_logistic, type = 'response')
+
+a%>% select(pred, group)
+```
+
+

@@ -1,0 +1,111 @@
+---
+title: "Kunxiao Gao Q1"
+output: html_notebook
+date: "2022-10-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Q1
+```{r}
+library(tidyverse)
+## 1. Get data
+# get names
+var_names <- read_csv('data/biomarker-raw.csv', 
+                     col_names = F, 
+                     n_max = 2, 
+                     col_select = -(1:2)) %>%
+  t() %>%
+  as_tibble() %>%
+  rename(name = V1, 
+         abbreviation = V2) %>%
+  na.omit()
+
+# function for trimming outliers (good idea??)
+trim <- function(x, .at){
+  x[abs(x) > .at] <- sign(x[abs(x) > .at])*.at
+  return(x)
+}
+# read in data
+biomarker_raw <- read_csv('data/biomarker-raw.csv', 
+         skip = 2,
+         col_select = -2L,
+         col_names = c('group', 
+                       'empty',
+                       pull(var_names, abbreviation),
+                       'ados'),
+         na = c('-', '')) %>%
+  filter(!is.na(group)) %>%
+  # reorder columns
+  select(group, ados, everything())
+# export as r binary
+save(list = 'biomarker_raw', 
+     file = 'data/biomarker-raw.RData')
+
+biomarker_raw
+biomarker_clean
+```
+
+```{r}
+##2. Plot the distribution for mean values
+set.seed(123)
+n <- sample(2:1319,size = 650)
+## Get mean values
+## For raw data
+raw_mean <- biomarker_raw %>% select(all_of(n)) %>% summarise_all(funs(mean),na.rm=TRUE) %>% gather(var, val)
+
+## For clean data
+clean_mean <- biomarker_clean %>% select(all_of(n)) %>% summarise_all(funs(mean),na.rm=TRUE) %>% gather(var, val)
+
+## plot the histograms
+par(mfrow=c(1,2))
+## Raw mean
+hist(raw_mean$val,breaks = 250,xlim = c(0,30000),main = "Histogram of raw_mean")
+
+## Clean mean
+hist(clean_mean$val,main = "Histogram of clean_mean")
+```
+
+```{r}
+##3. Plot the distribution for single variables
+set.seed(1234)
+n2 <- sample(2:1319,size = 5)
+## Get mean values
+## For raw data
+raw_var <- biomarker_raw %>% select(n2)
+
+## For clean data
+clean_var <- biomarker_clean %>% select(n2)
+
+## Pull the names
+col.name <- colnames(raw_var)
+
+## plot the histograms for single variable distribution
+for (i in 1:5) {
+  par(mfrow=c(1,2))
+## Raw 
+hist(pull(raw_var[i]),main = rbind(col.name[i],"raw"),xlab=rbind(col.name[i],"raw"))
+## Clean 
+hist(pull(clean_var[i]),main = rbind(col.name[i],"clean"),xlab=rbind(col.name[i],"clean"))
+}
+```
+
+In this part, we mainly draw the histograms to see the distributions of the data before and after log transformations. Then, we try to compare and find the properties of the distributions after log transformation. 
+
+In part one, the data are collected from the mean values of 650 random selected variables before and after log transformations. In this case, we want to compare the distributions of the mean values before and after log transformations, which could represents the distribution of the whole data set. According to the two histograms above, it is pretty obvious that the distribution of mean values are highly right skewed. Besides, the range of the distribution is very large even if we set the xlim. However, after log transformation, it is easy to find that the range of clean distribution becomes much smaller (from -0.06 to 0.05), and the distribution are more centered to middle at x=0. Besides, compared to the raw data distribution, the new distribution are not that skewed to the right.
+
+In part two, we mainly random select 5 proteins to see the distribution change of the single variable before and after the log transformation. In this case, we could find how log transformation affect the distribution of single protein level. Very Similar to what we observe for the distributions of mean values above, we could find that the first four raw distribution are skewed to the right with large ranges. For the last variable, CHL1, it also slightly skewed to the right. After log transformation, most new distributions become much likely to standard normal distribution centered at x=0, with range -3 to 3. Only for hnRNP K, its new distribution is still skewed to right because its original distribution is too skewed.
+
+Therefore, it is easy to find that log transformation could help us transform our data from an highly skewed distribution to a normal distribution, also decreasing the range of the data set. There are a lot of advantage to do the log transformation. First of all, after decreasing the range of the data, we could easily cluster the means and variances of different variables to a small range, which could help us easily observe and operate them. 
+
+More important, if we want to make regression model with those data in the future, the original data might have some disadvantages. When modeling variables with non-linear relationships, the chances of producing errors may also be skewed negatively. In theory, we want to produce the smallest error possible when making a prediction, while also taking into account that we should not be over fitting the model. Over fitting occurs when there are too many dependent variables in play that it does not have enough generalization of the data set to make a valid prediction.Therefore, the transformed data could effectively decrease the dependency among variables to decrease the chances of over fitting model, and decrease the prediction errors at the same time. Thus, using the transformation of one or more variables improves the fit of the model by transforming the distribution of the features to a more normally-shaped bell curve.
+
+
+
+
+
+
+
+
