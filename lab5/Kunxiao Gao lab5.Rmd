@@ -1,0 +1,179 @@
+---
+title: "lab5"
+output: pdf_document
+date: "2022-10-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+url <- 'https://raw.githubusercontent.com/pstat197/pstat197a/main/materials/scripts/package-installs.R'
+
+source(url)
+```
+
+```{r}
+# setup
+library(tidyverse)
+library(tidytext)
+library(tokenizers)
+library(textstem)
+library(stopwords)
+url <- 'https://raw.githubusercontent.com/pstat197/pstat197a/main/materials/labs/lab5-text/data/drseuss.txt'
+
+# read data
+seuss_lines <- read_lines(url, skip_empty_rows = T)
+```
+
+```{r}
+seuss_lines %>% head()
+# flag lines with a document id
+seuss_lines_df <- tibble(line_lag = c(seuss_lines, NA)) %>%
+  mutate(flag = str_detect(line_lag, 'Dr. Seuss'),
+         line = lag(line_lag, n = 1),
+         doc = cumsum(flag)) %>% 
+  select(doc, line) %>%
+  slice(-1) %>%
+  fill(doc)
+```
+```{r}
+# grab titles
+titles <- seuss_lines_df %>% 
+  group_by(doc) %>%
+  slice_head() %>%
+  pull(line) %>%
+  tolower()
+
+# label docs
+seuss_lines_df <- seuss_lines_df %>%
+  mutate(doc = factor(doc, labels = titles))
+```
+
+```{r}
+# remove header lines (title/author)
+seuss_lines_clean <- seuss_lines_df %>%
+  group_by(doc) %>%
+  mutate(line_num = row_number() - 2) %>%
+  filter(line_num > 0)
+```
+```{r}
+## Action:
+seuss_lines_clean %>%
+  group_by(doc) %>%
+  count() ##The cat in the hat-307 Fox in socks-150 green eggs and ham-158 hop on pop-64
+seuss_lines_clean %>%
+  mutate(flag=str_detect(line, 'bump')) %>%
+  group_by(doc) %>%
+  summarise(n_bump=sum(flag))
+```
+
+```{r}
+# collapse lines into one long string
+seuss_text <- seuss_lines_clean %>% 
+  summarize(text = str_c(line, collapse = ' '))
+cat_in_hat <- seuss_text %>% slice(1) %>% pull(text)
+cat_in_hat %>%
+  str_remove_all('[[:punct:]]') %>%
+  tolower()
+clean_fn <- function(.text){
+  str_remove_all(.text, '[[:punct:]]') %>% tolower()
+}
+
+seuss_text_clean <- seuss_text %>%
+  mutate(text = clean_fn(text))
+```
+```{r}
+##Action:
+clean_fn_2 <- function(.text){
+  str_remove_all(.text, "[\\,.?!]+") %>% tolower()
+}
+seuss_text_clean_2 <- seuss_text %>%
+  mutate(text = clean_fn_2(text))
+seuss_text_clean_2
+```
+
+```{r}
+stpwrd <- stop_words %>%
+  pull(word) %>%
+  str_remove_all('[[:punct:]]')
+
+seuss_tokens_long <- seuss_text_clean %>%
+  unnest_tokens(output = token, # specifies new column name
+                input = text, # specifies column containing text
+                token = 'words', # how to tokenize
+                stopwords = stpwrd) %>% # optional stopword removal
+  mutate(token = lemmatize_words(token)) 
+```
+
+```{r}
+##Action:
+a <- seuss_tokens_long %>%
+  group_by(doc,token) %>%
+  count()
+a %>% group_by(doc) %>% mutate(n=as.integer(n)) %>% summarise(n_max=max(n))
+##Most frequent word in "the cat in the hat": cat.
+## "fox in socks: sir"
+## "green eggs and ham: eat"
+## "hop on pop": brown, pat"
+
+b <- seuss_tokens_long %>% group_by(token) %>% count()
+max(b$n)
+b %>% filter(n==37)
+##sir
+```
+
+```{r}
+seuss_tfidf <- seuss_tokens_long %>%
+  count(doc, token) %>%
+  bind_tf_idf(term = token,
+              document = doc,
+              n = n) 
+
+seuss_df <- seuss_tfidf %>%
+  pivot_wider(id_cols = doc, 
+              names_from = token,
+              values_from = tf_idf,
+              values_fill = 0)
+
+seuss_df
+seuss_tfidf %>%
+  group_by(doc) %>%
+  slice_max(tf_idf, n = 2)
+seuss_tfidf %>%
+  group_by(doc) %>%
+  slice_max(tf, n = 2)
+```
+```{r}
+pair12 <- seuss_df[1,]-seuss_df[2,]
+sum(abs(pair12[2:246]))
+pair13 <- seuss_df[1,]-seuss_df[3,]
+sum(abs(pair13[2:246]))
+pair23 <- seuss_df[2,]-seuss_df[3,]
+sum(abs(pair23[2:246]))
+pair24 <- seuss_df[2,]-seuss_df[4,]
+sum(abs(pair24[2:246]))
+pair34 <- seuss_df[3,]-seuss_df[4,]
+sum(abs(pair34[2:246]))
+pair14 <- seuss_df[1,]-seuss_df[4,]
+sum(abs(pair14[2:246]))
+##I think the most different one is doc2 and doc4
+
+sum <- seuss_df[1,]+seuss_df[2,]+seuss_df[3,]+seuss_df[4,]
+ave <- sum[2:246]/4
+dff1 <- abs(seuss_df[1,][2:246]-ave)
+sum(dff1)
+dff2 <- abs(seuss_df[2,][2:246]-ave)
+sum(dff2)
+dff3 <- abs(seuss_df[3,][2:246]-ave)
+sum(dff3)
+dff4 <- abs(seuss_df[4,][2:246]-ave)
+sum(dff4)
+## It seems that doc 2 is most distinct from rest of them
+```
+
+
+
+
+

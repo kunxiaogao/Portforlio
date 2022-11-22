@@ -1,0 +1,152 @@
+---
+title: "lab4"
+output: pdf_document
+date: "2022-10-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# load packages
+library(tidyverse)
+library(tidymodels)
+library(modelr)
+library(rsample)
+library(yardstick)
+
+# read data
+url <- 'https://raw.githubusercontent.com/pstat197/pstat197a/main/materials/labs/lab4-logistic/data/biomarker_clean.csv'
+
+s_star <- c("DERM", "RELT", "IgD", "PTN", "FSTL1")
+biomarker <- read_csv(url) %>%
+  # subset to proteins of interest and group
+  select(group, any_of(s_star)) %>%
+  # convert group (chr) to binary (lgl)
+  mutate(class = (group == 'ASD')) %>%
+  select(-group)
+```
+```{r}
+# for reproducibility
+set.seed(102022)
+
+# partition data
+partitions <- biomarker %>%
+  initial_split(prop = 0.8)
+
+# examine
+partitions
+```
+```{r}
+# training set
+training(partitions) %>% head(4)
+# testing set
+testing(partitions) %>% head(4)
+```
+
+```{r}
+# fit glm
+fit <- glm(class ~ ., 
+           data = biomarker, 
+           family = binomial(link = "logit"))
+tidy(fit)
+## For example, if DERM + 1, then the odd of P(ASD) should mutiple exp{-0.6034}, which is -0.6034 in log level.
+```
+
+```{r}
+# compute predictions on the test set
+testing(partitions) %>%
+  add_predictions(fit)
+# manually transform to probabilities
+testing(partitions) %>%
+  add_predictions(fit) %>%
+  mutate(probs = 1/(1 + exp(-pred))) %>%
+  select(class, pred, probs) %>%
+  head(5)
+# predict on scale of response
+testing(partitions) %>%
+  add_predictions(fit, type = 'response') %>%
+  select(class, pred) %>%
+  head(5)
+```
+
+```{r}
+# predict classes
+testing(partitions) %>%
+  add_predictions(fit, type = 'response') %>%
+  mutate(pred.class = (pred > 0.5)) %>%
+  select(class, pred, pred.class) %>%
+  head(5)
+```
+
+```{r}
+# tabulate
+testing(partitions) %>%
+  add_predictions(fit, type = 'response') %>%
+  mutate(pred.class = (pred > 0.5)) %>%
+  select(class, pred.class) %>%
+  table()
+```
+
+```{r}
+# store predictions as factors
+pred_df <- testing(partitions) %>%
+  add_predictions(fit, type = 'response') %>%
+  mutate(pred.class = (pred > 0.5),
+         group = factor(class, labels = c('TD', 'ASD')),
+         pred.group = factor(pred.class, labels = c('TD', 'ASD'))) 
+
+# check order of factor levels
+pred_df %>% pull(group) %>% levels()
+```
+
+```{r}
+# compute specificity
+pred_df %>%
+  specificity(truth = group, 
+              estimate = pred.group,
+              event_level = 'second')
+```
+
+```{r}
+# sensitivity
+pred_df %>%
+  sensitivity(truth = group,
+              estimate = pred.group,
+              event_level = 'second')
+```
+
+```{r}
+##Action:
+# Accuracy
+pred_df %>%
+  accuracy(truth = group,
+              estimate = pred.group,
+              event_level = 'second')
+```
+
+```{r}
+# define panel (arguments must be yardstick metric function names)
+panel_fn <- metric_set(sensitivity, specificity)
+
+# compute
+pred_df %>%
+  panel_fn(truth = group,
+           estimate = pred.group,
+           event_level = 'second')
+```
+
+```{r}
+# define panel (arguments must be yardstick metric function names)
+panel_fn <- metric_set(precision, recall, f_meas)
+
+# compute
+pred_df %>%
+  panel_fn(truth = group,
+           estimate = pred.group,
+           event_level = 'second')
+```
+
+
+
