@@ -1,0 +1,147 @@
+---
+title: "lab3"
+output: pdf_document
+date: "2022-10-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("infer")
+```
+
+```{r}
+library(tidyverse)
+library(infer)
+# install.packages('infer') # execute once then comment out
+
+# data location
+url <- 'https://raw.githubusercontent.com/pstat197/pstat197a/main/materials/labs/lab3-iteration/data/biomarker-clean.csv'
+
+# function for outlier trimming
+trim_fn <- function(x){
+  x[x > 3] <- 3
+  x[x < -3] <- -3
+  
+  return(x)
+}
+
+# read in and preprocess data
+asd <- read_csv(url) %>%
+  select(-ados) %>%
+  # log transform
+  mutate(across(.cols = -group, log10)) %>%
+  # center and scale
+  mutate(across(.cols = -group, ~ scale(.x)[, 1])) %>%
+  # trim outliers
+  mutate(across(.cols = -group, trim_fn))
+```
+```{r}
+x <- asd %>% filter(group == 'ASD') %>% pull(CHIP)
+y <- asd %>% filter(group == 'TD') %>% pull(CHIP)
+t.test(x, y, var.equal = F)$ estimate[1]
+```
+```{r}
+##Action
+n_tests <- 50
+p_vals <- rep(NA, n_tests)
+estimate <- rep(NA, n_tests)
+for(i in 1:n_tests){
+  x <- asd %>% filter(group == 'ASD') %>% pull(i + 1)
+  y <- asd %>% filter(group == 'TD') %>% pull(i + 1)
+  p_vals[i] <- t.test(x, y, var.equal = F)$p.value
+  estimates <- t.test(x, y, var.equal = F)$estimate
+  estimate[i] <- estimates[1]-estimates[2]
+}
+tibble(protein = colnames(asd)[2:(n_tests + 1)], estimate = estimate,
+       p = p_vals)
+```
+
+
+```{r}
+# number of tests to perform
+n_tests <- 50
+
+# convert to a list
+asd_list <- asd %>% 
+  select(1:(n_tests + 1)) %>%
+  pivot_longer(cols = -group,
+               names_to = 'protein',
+               values_to = 'level') %>%
+  group_by(protein) %>%
+  group_split()
+
+# first entry in list
+asd_list[[1]]
+```
+```{r}
+##Action
+tt_fn <- function(i){
+  test_rslt <- t.test(level ~ group, data = asd_list[[i]])
+  out <- c(df = test_rslt$estimate[1]-test_rslt$estimate[2], 
+           SE = test_rslt$stderr)
+  out
+}
+
+tb <-sapply(1:n_tests, tt_fn) %>% t() %>% as_tibble()
+tb
+```
+
+
+```{r}
+##Action
+asd_nested <- asd %>%
+  pivot_longer(-group, 
+               names_to = 'protein', 
+               values_to = 'level') %>%
+  nest(data = c(level, group))
+# wrapper around infer::t_test
+tt_fn <- function(.df){
+  infer::t_test(.df, 
+         formula = level ~ group,
+         order = c('ASD', 'TD'),
+         alternative = 'two-sided',
+         var.equal = F)
+}
+
+# compute test results
+tt_out_50 <- asd_nested %>%
+  slice(1:n_tests) %>%
+  mutate(ttest = map(data, tt_fn))
+## 50 tests
+tt_50 <- tt_out_50 %>% 
+  unnest(ttest) %>%
+  arrange(p_value) %>%
+  mutate( rank=row_number(p_value), p_adj = p_value*n_tests/rank) %>%
+  select(protein, p_value, p_adj,rank) %>%
+  filter(p_adj <0.01)
+tt_50
+## All 1317 tests
+tt_out_all <- asd_nested %>%
+  mutate(ttest = map(data, tt_fn))
+tt_all <- tt_out_all %>% 
+  unnest(ttest) %>%
+  arrange(p_value) %>%
+  mutate( rank=row_number(p_value), p_adj = p_value*1317/rank) %>%
+  select(protein, p_value, p_adj,rank) %>%
+  filter(p_adj <0.01)
+tt_all
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
