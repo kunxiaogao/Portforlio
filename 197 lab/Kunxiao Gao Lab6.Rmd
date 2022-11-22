@@ -1,0 +1,126 @@
+---
+title: "Kunxiao Gao Lab6"
+author: "Kunxiao Gao"
+date: "2022-11-22"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# packages
+library(tidyverse)
+library(tidymodels)
+library(tidytext)
+library(keras)
+library(tensorflow)
+
+# data location
+url <- 'https://raw.githubusercontent.com/pstat197/pstat197a/main/materials/labs/lab6-nn/data/claims-clean.csv'
+
+# read in data
+clean <- read_csv(url)
+```
+
+```{r}
+##Action:
+# partition
+set.seed(102722)
+partitions <- clean %>%
+  mutate(text_clean = str_trim(text_clean)) %>%
+  filter(str_length(text_clean) > 5) %>%
+  initial_split(prop = 0.8)
+
+train_dtm <- training(partitions) %>%
+  unnest_tokens(output = 'token', 
+                input = text_clean) %>%
+  group_by(.id, bclass) %>%
+  count(token) %>%
+  bind_tf_idf(term = token, 
+              document = .id, 
+              n = n) %>%
+  pivot_wider(id_cols = c(.id, bclass), 
+              names_from = token, 
+              values_from = tf_idf,
+              values_fill = 0) %>%
+  ungroup()
+```
+
+```{r}
+# extract first ten features
+x_train <- train_dtm %>%
+  ungroup() %>%
+  select(-.id, -bclass) %>%
+  select(1:10) %>%
+  as.matrix()
+
+# extract labels and coerce to binary
+y_train <- train_dtm %>% 
+  pull(bclass) %>%
+  factor() %>%
+  as.numeric() - 1
+```
+
+```{r}
+# specify model type
+model <- keras_model_sequential(input_shape = 10)
+summary(model)
+
+# add output layer
+model <- model %>% layer_dense(1) 
+summary(model)
+
+model <- model %>% 
+  layer_activation(activation = 'sigmoid')
+
+model %>% compile(
+  loss = 'binary_crossentropy',
+  optimizer = optimizer_sgd(),
+  metrics = 'binary_accuracy'
+)
+
+history <- model %>%
+  fit(x = x_train, 
+      y = y_train,
+      epochs = 10)
+```
+
+```{r}
+# retrieve weights
+get_weights(model)
+
+# evaluate on specified data
+evaluate(model, x_train, y_train)
+
+# compute predictions
+model(x_train) %>% head()
+```
+
+```{r}
+# store full DTM as a matrix
+x_train <- train_dtm %>%
+  select(-bclass, -.id) %>%
+  as.matrix()
+
+model <- keras_model_sequential(input_shape = ncol(x_train)) %>%
+  layer_dense(10) %>%
+  layer_dense(1) %>%
+  layer_activation(activation = 'sigmoid')
+
+summary(model)
+```
+
+
+```{r}
+model %>%
+  compile(
+    loss = 'binary_crossentropy',
+    optimizer = optimizer_sgd(),
+    metrics = 'binary_accuracy'
+  )
+history <- model %>%
+  fit(x = x_train,
+      y = y_train,
+      epochs = 50)
+
+plot(history)
+```
+
