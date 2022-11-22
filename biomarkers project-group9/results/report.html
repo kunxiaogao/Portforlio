@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Kunxiao Gao, Alexis Navarra, Sammy Sullivan, Allen Wang">
-<meta name="dcterms.date" content="2022-10-30">
+<meta name="dcterms.date" content="2022-11-21">
 
 <title>Biomarkers of ASD</title>
 <style>
@@ -66,7 +66,7 @@ ul.task-list li input[type="checkbox"] {
     <div>
     <div class="quarto-title-meta-heading">Updated</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">October 30, 2022</p>
+      <p class="date">November 21, 2022</p>
     </div>
   </div>
     
@@ -144,8 +144,8 @@ ul.task-list li input[type="checkbox"] {
 <h2 class="anchored" data-anchor-id="findings">Findings</h2>
 <section id="impact-of-preprocessing-and-outliers" class="level3">
 <h3 class="anchored" data-anchor-id="impact-of-preprocessing-and-outliers">Impact of preprocessing and outliers</h3>
-<section id="log-transformation-kunxiao" class="level4">
-<h4 class="anchored" data-anchor-id="log-transformation-kunxiao">Log transformation (Kunxiao):</h4>
+<section id="log-transformation" class="level4">
+<h4 class="anchored" data-anchor-id="log-transformation">Log transformation:</h4>
 <div class="cell" data-hash="report_cache/html/unnamed-chunk-3_b53d318a677fb7ef63894f33df3f23ee">
 <div class="cell-output-display">
 <p><img src="report_files/figure-html/unnamed-chunk-3-1.png" class="img-fluid" width="672"></p>
@@ -182,8 +182,8 @@ ul.task-list li input[type="checkbox"] {
 <p>After removing the trim function from the preprocessing file, and saving the outliers into a separate data frame, our exploratory analysis uncovered a number of surprising results. Almost every subject (except for exactly 2) had at least one associated outlier variable, so simply examining the subjects with associated outlier variables would not be sufficient to reach a conclusion on why the values were trimmed from the dataset, or whether they should be excluded at all. After plotting the data, it can be easily seen that a few subjects exhibit markedly higher number of associated outlier values, so we chose to focus our analysis on these subjects instead. Examining the groups of these subjects, the majority were classed as ‘Typically Developing’. However, when we ran the same analysis on all subjects with outliers, the majority were classed ASD. Some possible explanations for this are that the subjects classed ASD are more prone to higher levels of characteristic proteins, in which case trimming the outliers may actually hinder our analysis.</p>
 </section>
 </section>
-<section id="methodological-variations-allen-wang" class="level3">
-<h3 class="anchored" data-anchor-id="methodological-variations-allen-wang">Methodological variations (Allen Wang)</h3>
+<section id="methodological-variations" class="level3">
+<h3 class="anchored" data-anchor-id="methodological-variations">Methodological variations</h3>
 <p>In the task 3, we modify some procedures we have done in the lecture to see how they influence the final result. First, we split the biomarker_clean data set into a 80 percent of training set and a 20 percent of testing set. Then, we repeat multiple t-tests, correlation test with ‘ados’, and random forests to select significant proteins to predict whether a person is ASD or not.</p>
 <p>The multiple testing here utilizes t-test to infer the mean difference of each protein variable between “TD” and “ASD” groups: <span class="math inline">\(\delta_i = \mu^i_{ASD} - \mu^i_{TD}\)</span> , where <span class="math inline">\(\mu^i_{ASD}\)</span> is the mean serum level of protein <span class="math inline">\(i\)</span> in the “ASD” group and <span class="math inline">\(\mu^i_{TD}\)</span> is the mean serum level of protein <span class="math inline">\(i\)</span> in the “TD” group. Then, we set <span class="math inline">\(H_{0i}: \delta_i = 0\)</span> and reject this null hypothesis if <span class="math inline">\(|\frac{\hat \delta_i}{SE(\hat \delta_i)} &gt; t_{\alpha}|\)</span>. Also, we use the Benjamini-Yekutieli Correction to limit false rejections. After implementing t-tests over 1000 times, we sort the adjusted p-values from smallest to largest to pick top 15 protein variables.</p>
 <div class="cell" data-hash="report_cache/html/unnamed-chunk-5_3064d1027ff86bd6d7bf0a6c99dba724">
