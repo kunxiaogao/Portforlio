@@ -1,0 +1,287 @@
+---
+title: "Homework 6"
+author: "Kunxiao Gao, Xiao Zhang PSTAT 115, Fall 2022"
+date: "Due on November 30, 2022 at 11:59 pm"
+output: pdf_document
+---
+
+```{r setup, include=TRUE}
+options(tinytex.verbose = TRUE)
+options(buildtools.check = function(action) TRUE )
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(rstan))
+suppressPackageStartupMessages(library(testthat))
+library(coda)
+```
+
+Q1 Logistic regression for toxicity data.
+(1a):
+\[ \theta(x_i) = \frac{e^{\alpha+\beta x_i}}{1+e^{\alpha+\beta x_i}}  \]
+
+(1b):
+$\text{logit}(\theta_i(x_i)) = \alpha + \beta x_i \leftrightarrow \log(\frac{\theta_i(x_i)}{1-\theta_i(x_i)})=\alpha + \beta x_i$.
+In this case, $\log(0.5/(1-0.5))=\alpha + \beta x_i$, thus $log(1)=0=\alpha + \beta x_i$.
+Therefore, $x_i=-\frac{\alpha}{\beta}$.
+LD50 is $-\frac{\alpha}{\beta}$.
+
+(1c):
+```{r}
+library(rstan)
+logistic_string = "
+data {
+  int<lower=0> N;
+  vector[N] x;
+  int<lower=0, upper=1> y[N];
+}
+parameters {
+  real alpha;
+  real beta;
+}
+model {
+  y ~ bernoulli_logit(alpha + beta * x);
+}"
+x <- c(1.06, 1.41, 1.85, 1.5, 0.46, 1.21, 1.25, 1.09,
+1.76, 1.75, 1.47, 1.03, 1.1, 1.41, 1.83, 1.17,
+1.5, 1.64, 1.34, 1.31)
+y <- c(0, 1, 1, 1, 0, 1, 1, 1, 1, 1,
+1, 0, 0, 1, 1, 0, 0, 1, 1, 0)
+n <- length(x)
+set.seed(1234)
+stan_samples = stan(model_code = logistic_string,data = list(N=n,x=x,y=y))
+```
+
+```{r}
+set.seed(1234)
+samples <- rstan::extract(stan_samples)
+alpha_samples <- samples$alpha
+beta_samples <- samples$beta
+LD50_sample <- -alpha_samples/beta_samples
+mean(LD50_sample)
+```
+The estimate of the posterior mean of the LD50 is about 1.203456.
+
+(1d):
+```{r}
+xgrid <- seq(0, 2, by=0.1)
+## Evaluate probability on the xgrid for one (alpha, beta) sample
+compute_curve <- function(sample) {
+alpha <- sample[1]
+beta <- sample[2]
+prob <- exp(alpha+beta*xgrid)/(1+exp(alpha+beta*xgrid))
+return(prob)
+}
+theta <- apply(cbind(alpha_samples, beta_samples), 1, compute_curve)
+quantiles <- apply(theta, 1, function(x) quantile(x, c(0.025, 0.25, 0.75, 0.975)))
+posterior_mean <- rowMeans(theta)
+#posterior_med <- apply(res, 1, median)
+tibble(x=xgrid,
+q025=quantiles[1, ],
+q25=quantiles[2, ],
+q75=quantiles[3, ],
+q975=quantiles[4, ],
+mean=posterior_mean) %>%
+ggplot() +
+geom_ribbon(aes(x=xgrid, ymin=q025, ymax=q975), alpha=0.2) +
+geom_ribbon(aes(x=xgrid, ymin=q25, ymax=q75), alpha=0.5) +
+geom_line(aes(x=xgrid, y=posterior_mean), size=1) +
+theme_bw()+ geom_hline(yintercept=0.5, linetype="dashed", color = "red")
+```
+
+According to the plot, the x-value at which the posterior mean crosses 0.5 is about 1.23, which is very close to the estimated value 1.203456 above. Therefore, I computed the LD50
+correctly. 
+
+Q2 Implementing your own Metropolis-Hastings Algorithm.
+(2a):
+```{r}
+## Pesticide toxicity data
+x <- c(1.06, 1.41, 1.85, 1.5, 0.46, 1.21, 1.25, 1.09,
+1.76, 1.75, 1.47, 1.03, 1.1, 1.41, 1.83, 1.17,
+1.5, 1.64, 1.34, 1.31)
+y <- c(0, 1, 1, 1, 0, 1, 1, 1, 1, 1,
+1, 0, 0, 1, 1, 0, 0, 1, 1, 0)
+#Log posterior function. Must incorporate x and y data above.
+log_posterior <- function(theta) {
+alpha <- theta[1]
+beta <- theta[2]
+## Compute the probabilities as a function of alpha and beta
+## for the observed x, y data
+prob <- ((exp(alpha+beta*x)/(1+exp(alpha+beta*x)))^y)*(1-exp(alpha+beta*x)/(1+exp(alpha+beta*x)))^(1-y)
+if(any(prob == 0) | any(prob == 1))
+prob <- sum(log(prob)) ## log likelihood is ..... is prob=0 or 1
+else
+prob <- sum(log(prob))
+return(prob)
+}
+```
+
+(2b):
+```{r}
+###############################################
+## Metropolis-Hastings for the Logistic Model
+###############################################
+## Function to generate samples using the Metropolis-Hasting Sampler
+## theta_0: initialization of the form c(alpha_init, beta_init) for some values alpha_init, beta_init
+## burnin: amount of iterations to discard to reduce dependence on starting point
+## iters: total number of iterations to run the algorithm (must be greater than `burnin`)
+mh_logistic <- function(theta_0, burnin, iters, cov=diag(2)){
+# Initialize parameters.
+theta_t <- theta_0
+## Create a matrix where we will store samples
+theta_out <- matrix(0, nrow=iters, ncol=2, dimnames=list(1:iters, c("alpha", "beta")))
+for(i in 1:iters){
+## Propose new theta = (alpha, beta)
+## The proposal will be centered the current
+## value theta_t. Use mvtnorm::rmvnorm
+theta_p <- mvtnorm::rmvnorm(1,mean = theta_t,sigma = cov) # YOUR SOLUTION HERE
+## Accept/reject step. Keep theta prev if reject, otherwise take theta_p
+## Will require evaluating `log_posterior` function twice
+## Log-rejection ratio for symmetric proposal
+logr <- log_posterior(theta_p)-log_posterior(theta_0) # YOUR SOLUTION HERE
+## Update theta_t based on whether the proposal is accepted or not
+unif <- runif(1,0,1)
+logu <- log(unif)
+if(logr>logu)
+  theta_t=theta_p
+else
+  theta_t=theta_t
+## Save the draw
+theta_out[i, ] <- theta_t
+}
+## Chop off the first part of the chain -- this reduces dependence on the starting point.
+if(burnin == 0)
+output = theta_out
+else
+output = theta_out[-(1:burnin), ]
+return(output)
+}
+set.seed(12345)
+samples <- mh_logistic(c(0, 0), 1000, 10000)
+ld50_posterior_mean <- mean(-samples[,1]/samples[,2]) # YOUR SOLUTION HERE
+ld50_posterior_mean
+```
+The estimated posterior mean is very close to the value we got in (1c).
+
+(2c):
+
+```{r}
+library(coda)
+set.seed(123)
+samples <- mh_logistic(c(0, 0), 1000, 10000) # YOUR SOLUTION HERE
+ld50_samples <- -samples[,1]/samples[,2] # YOUR SOLUTION HERE
+ld50_ess <- coda::effectiveSize(ld50_samples) # YOUR SOLUTION HERE
+ld50_ess
+coda::traceplot(as.mcmc(ld50_samples))
+## Re run the sampler using your new setting of cov
+set.seed(123)
+samples_new <- mh_logistic(c(0, 0), 1000, 10000,cov=0.4*diag(2))
+ld50_samples_new <- -samples_new[,1]/samples_new[,2] # YOUR SOLUTION HERE
+ld50_ess_new <- coda::effectiveSize(ld50_samples_new) # YOUR SOLUTION HERE
+ld50_ess_new
+coda::traceplot(as.mcmc(ld50_samples_new))
+```
+We could achieve a sample size about 7000 after try new cov=0.4*diag(2).
+
+Q3 Gibbs sampler for mixtures.
+(3a):
+```{r}
+p = function(theta){
+0.45 * dnorm(theta, mean = -3, sd = sqrt(1/3)) +
+0.10 * dnorm(theta, mean = 0, sd = sqrt(1/3)) +
+0.45 * dnorm(theta, mean = 3, sd = sqrt(1/3))
+}
+theta = seq(-6, 6, length.out = 1000)
+plot(theta, p(theta), typ="l")
+```
+
+```{r}
+# YOUR SOLUTION HERE
+r_p = function(n){
+mu_1 = -3
+mu_2 = 0
+mu_3 = 3
+mu = c(mu_1, mu_2, mu_3)
+sigma2_1 = 1/3
+sigma2_2 = 1/3
+sigma2_3 = 1/3
+sigma2 = c(sigma2_1, sigma2_2, sigma2_3)
+p_1 = 0.45
+p_2 = 0.1
+p_3 = 0.45
+index = sample(size = n,
+x = c(1,2,3),
+prob = c(p_1, p_2, p_3))
+for(k in 1:n){
+samples[k] = rnorm(1,mean=mu[index[k]],sd=sqrt(sigma2[index[k]]))
+}
+return(samples)
+}
+```
+
+(3b):
+\[ P(j = k \mid \theta) = \frac{P(\theta \mid j)*P(j)}{P(\theta)}=\frac{P(j = k) p_k(\theta \mid \mu_k, \sigma^2_k)}{\sum_jP(\theta, j)}\\=\frac{P(j = k) p_k(\theta \mid \mu_k, \sigma^2_k)}{\sum_jP(\theta \mid j)*P(j)} =\frac{P(j = k) p_k(\theta \mid \mu_k, \sigma^2_k)}{\sum_{m=1}^3 P(j = m) p_m(\theta \mid \mu_m, \sigma^2_m) }. \]
+
+(3c):
+```{r}
+gibb = function(n,theta0,j0){
+thetat <- theta0
+jt <- j0
+mu_1 = -3
+mu_2 = 0
+mu_3 = 3
+mu = c(mu_1, mu_2, mu_3)
+sigma2_1 = 1/3
+sigma2_2 = 1/3
+sigma2_3 = 1/3
+sigma2 = c(sigma2_1, sigma2_2, sigma2_3)
+p_1 = 0.45
+p_2 = 0.1
+p_3 = 0.45
+samples <- matrix(0, nrow=n, ncol=2, dimnames=list(1:n, c("theta", "j")))
+for(k in 1:n){
+thetat <- rnorm(1,mean=mu[jt],sd=sqrt(sigma2[jt]))
+jt <- sample(size = 1,x = c(1,2,3),prob = c(p_1, p_2, p_3))
+samples[k,1]=thetat
+samples[k,2]=jt}
+return(samples)
+}
+
+samples_1000 <- gibb(1000,0,2)
+hist(samples_1000[,1],main = "theta",breaks = 30)
+```
+
+Compared to the true marginal density of $\theta$, the distribution of Gibbs samples of $\theta$ is very similar to the true distribution.
+
+(3d):
+```{r}
+samples_40000 <- gibb(40000,0,2)
+hist(samples_40000[,1],main = "theta",breaks = 30)
+```
+The distribution generated from 40000 samples are more similar to the true marginal distribution of $\theta$.
+
+(3e):
+```{r}
+coda::traceplot(as.mcmc(samples_1000[,1]),xlim=c(0,500))
+acf(samples_1000[,1])
+coda::traceplot(as.mcmc(samples_40000[,1]),xlim=c(0,500))
+acf(as.mcmc(samples_40000[,1]))
+```
+From the MCMC diagnostics, the traceplot of 1000 samples largely and stably varied from -4 to 4, similar to the traceplot of 40000 samples, and lots of points stay around 3 and -3, with a certain amount of points staying around 0. Both of two traceplot could show a good distribution similar to the true distribution of $\theta$. According to the autocorrelation plots, we could observe very low correlations for both 1000 and 40000 samples. However, we could still observe some correlations over the blue line in 1000 samples, but there's no any significant correlations observed in 40000 samples. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
