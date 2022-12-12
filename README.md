@@ -64,7 +64,9 @@ This file includes all the works about web crawling in the internship at China U
 -   Main Goal: Based on the behavioral trajectory and attribute tags of Unicom users, after desensitization and processing through SS platform, data statistics from different time and space and user attribute perspectives can be realized by combining with customer requirements. Provide crowd characteristics attributes for each dimension of each grid in the city to support index evaluation, business insight, and latent customer mining. Based on multi-source data, we use big data technologies and algorithms such as machine learning to build application models for industry scenarios.
 -   Personal Work Objectives: Crawling through all branches of the largest 36 banks throughout China for specific information including but not limited to: Name, Province, City, Address, Tel, Longtitude, Latitude, and so on. Complete latitude and longitude conversion of different map (Gaode, Baidu, and Google) standards to achieve latitude and longitude uniformity.
 
-### Libraries used (in Python): `requests`, `lxml`,`fake-useragent`, `bs4 (BeautifulSoup)`, `grab`, `urllib3`, `httplib2`, `aiohttp`, `regex`, and so on.
+### Libraries used (in Python): 
+
+-   `requests`, `lxml`,`fake-useragent`, `bs4 (BeautifulSoup)`, `grab`, `urllib3`, `httplib2`, `aiohttp`, `regex`, and so on.
 
 `scripts` contains the tool functions that could be learned and applied, and the draft works for 35 banks (One bank data acquisition failed because the anti-crawl mechanism was too strong).
 
