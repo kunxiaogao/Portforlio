@@ -16,12 +16,12 @@ The reason why I uploaded those stuffs is that I think they are very useful lear
 ## Capstone project biomarkers-group9
 This file includes all the works of the Capstone project assignment in group 9: biomarkers. 
 
-Brief background introduction: 
+### Brief background introduction: 
 
 -   Levels of proteins in plasma/serum are altered in autism spectrum disorder (ASD). Goal: identify a panel of proteins useful as a blood biomarker for early detection of ASD. So in other words, we want to find proteins whose serum levels are predictive of ASD.
 -   Serum samples are from 76 boys with ASD and 78 typically developing (TD) boys, 18 months-8 years of age. A total of 1,125 proteins were analyzed from each sample: 1,317 measured, 192 failed quality control (we don’t know which ones failed QC so will use all).
 
-Methodology:
+### Methodology:
 
 -   Variable selection (`LASSO regularization`), classification (`logistic regression` and `random forests`), and multiple testing correlations (with FDR control) will all be accessed to find good protein panels whose serum levels are predictive of ASD; the `classification accuracy metrics` will also be discussed to test the performance of the models. At the same time, we also care about the problems like `data partitioning`, `model interpretability` and `high dimensional data`.
 
@@ -36,12 +36,12 @@ All the details all included in the project file.
 ## Capstone project webpage classification-group10
 This file includes all the works of the Capstone project assignment in group 10: fraud claims. 
 
-Brief background introduction: 
+### Brief background introduction: 
 
 -   Goal: Use different predictive models to flag webpages that may contain evidence related to fraud claims. (Given a webpage, want to predict whether contents include potential evidence).
 -   Data available to develop a model are a collection of about 3,000 labeled webpages that are manually assigned labels to multiple classes. (Sampling method unclear which comes from a 2021-2022 capstone project, and predictive model fit to this data may not work well in general for an arbitrary webpage).
 
-Methodology:
+### Methodology:
 
 -   `HTML scraping` strategies for captureing webpages' content; `NLP` techniques for converting text to data and web scraping tools in R; Dimension reduction techniques (`PCA`) for reducing dimension; multiclass classification methods for identifying webpage categories: training `Multinomial Logistic Regression Models` (with and without running PCA), `Neural Networks`, `SVM`, and `Recurrent Neural Network` in R. The `classification accuracy metrics` will also be discussed to test the performance of different models.
 
