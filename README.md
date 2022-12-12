@@ -55,8 +55,14 @@ This file includes all the works of the Capstone project assignment in group 10:
 
 All the details all included in the project file.
 
+## Internship Web crawling
 
+This file includes all the works about web crawling in the internship at China Unicom. 
 
+### Brief background introduction: 
+
+-   Levels of proteins in plasma/serum are altered in autism spectrum disorder (ASD). Goal: identify a panel of proteins useful as a blood biomarker for early detection of ASD. So in other words, we want to find proteins whose serum levels are predictive of ASD.
+-   Serum samples are from 76 boys with ASD and 78 typically developing (TD) boys, 18 months-8 years of age. A total of 1,125 proteins were analyzed from each sample: 1,317 measured, 192 failed quality control (we don’t know which ones failed QC so will use all).
 
 
 
