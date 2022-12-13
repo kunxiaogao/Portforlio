@@ -72,7 +72,19 @@ This file includes all the works about web crawling in the internship at China U
 
 `results` contains all the crawled data after cleaning for 35 banks in xlsx format.
 
-## To Be Continued
+## Internship PPT Auto-Generation
+
+This file includes all the tools about PPT Auto-Generation used for the internship at China Unicom. 
+
+### Brief background introduction: 
+
+-   Goals: Generate PPT for Nine Cities Macro Indicators Summary. 
+
+### Libraries used (in Python): 
+
+-   `pptx.util`, `pptx.dml.color`, `pptx.enum.text`, `pptx.chart.data`, and so on.
+-   For various reasons, all relevant scripts and results were not stored in the personal device and are nowhere to be found. Thus, only relevant templates and tools can be saved.
+
 
 
 
