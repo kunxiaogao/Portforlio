@@ -31,7 +31,7 @@ This file includes all the works of the Capstone project assignment in group 9: 
 
 `results` contain the final outcomes: `report.qmd` `report.html`.
 
-All the details all included in the project file.
+All the details are included in the project file.
 
 ## Capstone project webpage classification-group10
 This file includes all the works of the Capstone project assignment in group 10: fraud claims. 
@@ -53,7 +53,7 @@ This file includes all the works of the Capstone project assignment in group 10:
 
 `writeups` contain the final outcomes: `prediction-summary.html`, `prediction-summary.qmd`, `tasks_summary.html`, and `tasks_summary.qmd`.
 
-All the details all included in the project file.
+All the details are included in the project file.
 
 ## Internship Web crawling
 
@@ -85,10 +85,14 @@ This file includes all the tools about PPT Auto-Generation used for the internsh
 -   `pptx.util`, `pptx.dml.color`, `pptx.enum.text`, `pptx.chart.data`, and so on.
 -   For various reasons, all relevant scripts and results were not stored in the personal device and are nowhere to be found. Thus, only relevant templates and tools can be saved.
 
+## MCMC
+This file mainly includes some examples and course works for PSTAT115 Bayes Data Analysis and it is still be to updated. The contents are mainly about Implementation about different samplers in MCMC algorithm and some examples of writing codes with Stan. The reason why I uploaded those stuffs is that I think they are very useful learning materials containing lots of good example codes, which I could directly apply in the future. 
 
+## The samplers included:
+-   `Metropolis-Hasting algorithm`:
+-   `Metropolis algorithm`, `HMC algorithm`, and `Gibbs algorithm`.
 
-
-
+All the details about background information and data sets used are included in the files.
 
 
 
