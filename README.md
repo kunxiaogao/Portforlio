@@ -88,7 +88,7 @@ This file includes all the tools about PPT Auto-Generation used for the internsh
 ## MCMC
 This file mainly includes some examples and course works for PSTAT115 Bayes Data Analysis and it is still be to updated. The contents are mainly about Implementation about different samplers in MCMC algorithm and some examples of writing codes with Stan. The reason why I uploaded those stuffs is that I think they are very useful learning materials containing lots of good example codes, which I could directly apply in the future. 
 
-## The samplers included:
+### The samplers included:
 -   `Metropolis-Hasting algorithm`:
 -   `Metropolis algorithm`, `HMC algorithm`, and `Gibbs algorithm`.
 
