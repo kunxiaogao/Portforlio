@@ -55,6 +55,29 @@ This file includes all the works of the Capstone project assignment in group 10:
 
 All the details are included in the project file.
 
+## Capstone project clustering methods-group8
+This file includes all the works of the Capstone project assignment in group 8: clustering methods. 
+
+### Brief background introduction: 
+
+-   To fighting poverty and providing the people of backward countries with basic amenities and relief during the time of disasters and natural calamities, we have to make decision to choose the countries that are in the direst need of aid. 
+-   Goal: To categorise the countries using socio-economic and health factors that determine the overall development of the country.
+-   To demonstrate each of these clustering methods, we will use a country-level data set that includes 167 unique observations (not every country is represented). The variables related to socio-economic and health are included, such as `gdpp`, `child_mortality`, `health`, and so on. 
+
+### Methodology:
+
+-   Optimization methods: Elbow method, Average Silhouette method, Gap Statistic method; Clustering methods used to train the models: Hierarchical clustering, Model-based clustering (including the algorithm to choose the best model), Density-based clustering; Dimension reduction techniques (`PCA`) for reducing dimension; Visualization techniques to visualize results: Dendrograms and Maps.
+
+`data` contains all the raw data and processed data used in analysis. 
+
+`scripts` contains the tool functions that could be learned and applied, and the whole group's draft works.
+
+`image` contain the images sources used in the report.
+
+The final outcomes: `Vignette.Rmd` `Vignette.html`.
+
+All the details are included in the project file.
+
 ## Internship Web crawling
 
 This file includes all the works about web crawling in the internship at China Unicom. 
