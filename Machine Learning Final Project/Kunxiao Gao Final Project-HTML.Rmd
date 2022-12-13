@@ -1,0 +1,726 @@
+---
+title: "Final Project"
+author: "Kunxiao Gao"
+date: "2022-12-08"
+output: 
+  html_document:
+    code_folding: show
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(ggridges)
+library(tree)
+library(maptree)
+library(glmnet)
+library(ROCR)
+library(randomForest)
+library(e1071)
+library(psych)
+
+# allow scrolling for long code
+options(width = 200)
+```
+
+```{r}
+## read data and convert candidate names and party names from string to factor
+## we manually remove the variable "won", the indicator of county level winner
+## In Problem 5 we will reproduce this variable!
+election.raw <- read_csv("candidates_county.csv", col_names = TRUE) %>% 
+  mutate(candidate = as.factor(candidate), party = as.factor(party), won = NULL)
+
+## remove the word "County" from the county names
+words.to.remove = c("County")
+remove.words <- function(str, words.to.remove){
+  sapply(str, function(str){
+    x <- unlist(strsplit(str, " "))
+    x <- x[!x %in% words.to.remove]
+    return(paste(x, collapse = " "))
+  }, simplify = "array", USE.NAMES = FALSE)
+}
+election.raw$county <- remove.words(election.raw$county, words.to.remove)
+
+## read census data
+census <- read_csv("census_county.csv") 
+```
+
+# Election data
+
+## Q1.
+```{r}
+dim(election.raw)
+sum(is.na(election.raw))
+nrow(as.data.frame(table(election.raw$state)))
+```
+
+The dimension of election.row is 32177,5. 
+There is no missing value in the data set.
+There are 51 different values in state in election.raw.
+
+# Census data
+
+## Q2.
+```{r}
+dim(census)
+sum(is.na(census))
+nrow(as.data.frame(table(census$County)))
+nrow(as.data.frame(table(election.raw$county)))
+```
+
+The dimension of census is 3220,37. 
+There is a missing value in the data set.
+There are 1955 distinct values in county in census.
+However, the total number of distinct county in election.raw is about 2825, which is much larger than total number of distinct county in census. 
+According to comparison, we find that much more different counties are recorded in election.raw data set, and thus maybe census data set gets incomplete statistics of county.
+
+# Data wrangling
+
+## Q3.
+```{r}
+election.state <- election.raw%>% mutate(state=as.factor(state)) %>%group_by(state,candidate) %>% summarise(tot_votes = sum(total_votes))
+election.total <- election.raw %>%group_by(candidate) %>% summarise(tot_votes = sum(total_votes))
+head(election.state,5)
+head(election.total,5)
+```
+
+## Q4.
+```{r,fig.width=7,fig.height=7}
+nrow(as.data.frame(table(election.raw$candidate)))
+vote <- election.raw %>%group_by(candidate) %>% summarise(log_tot_votes = log(sum(total_votes)))
+vote %>%
+  ggplot(aes(x = log_tot_votes, y = reorder(candidate,+log_tot_votes))) +
+  geom_bar(stat = 'identity') +
+  xlab("Log-transformed votes") +
+  ylab("Presidential Candidates") +
+  ggtitle("Votes Received by Candidates in the 2020 Election")
+```
+
+38 named presidential candidates were there in the 2020 election.
+
+## Q5.
+```{r}
+state.winner <- election.raw %>% group_by(state) %>% mutate(total = sum(total_votes)) %>% mutate(pct=total_votes/total) %>% group_by(state,candidate) %>% summarise(pct=sum(pct)) %>% top_n(1)
+county.winner <- election.raw %>% group_by(state,county) %>% mutate(total = sum(total_votes)) %>% mutate(pct=total_votes/total) %>% top_n(1)
+head(state.winner,5)
+head(county.winner,5)
+```
+
+# Visualization
+
+```{r}
+states <- map_data("state")
+
+ggplot(data = states) + 
+  geom_polygon(aes(x = long, y = lat, fill = region, group = group),
+               color = "white") + 
+  coord_fixed(1.3) +
+  guides(fill=FALSE)  # color legend is unnecessary and takes too long
+```
+
+## Q6.
+```{r}
+counties = map_data("county")
+ggplot(data = counties) + 
+  geom_polygon(aes(x = long, y = lat, fill = subregion, group = group),
+               color = "white") + 
+  coord_fixed(1.3) +
+  guides(fill=FALSE)  # color legend is unnecessary and takes too long
+```
+
+## Q7.
+```{r}
+state.winner$state<-tolower(state.winner$state)
+join_state <- left_join(state.winner,states,by=c("state"="region"))
+ggplot(data = join_state) + 
+  geom_polygon(aes(x = long, y = lat, fill = candidate, group = group),
+               color = "white") + 
+  coord_fixed(1.3)
+```
+
+## Q8.
+```{r}
+county.winner$state<-tolower(county.winner$state)
+county.winner$county<-tolower(county.winner$county)
+county.ca <- counties %>% filter(region=="california")
+county.winner.ca <- county.winner %>% filter(state=="california")
+join_ca <- left_join(county.winner.ca,county.ca,by=c("county"="subregion"))
+ggplot(data = join_ca) + 
+  geom_polygon(aes(x = long, y = lat, fill = candidate, group = group),
+               color = "white") + 
+  coord_fixed(1.3)
+```
+
+## Q9.
+
+```{r}
+# Ethnicity plot 
+ethnic <- c("Pacific", "Asian", "Native", "White", "Hispanic","Black")
+Ethnicity_state <- census %>%  na.omit() %>% select(c("State","TotalPop",ethnic)) %>% mutate(across(ethnic,~.x*TotalPop*0.01,.names = "{.col}")) %>% group_by(State) %>% summarise_all(.funs=sum) 
+Ethnicity_state$State <- tolower(Ethnicity_state$State)
+Ethnicity_state <- left_join(Ethnicity_state,state.winner,by=c("State"="state")) 
+Ethnicity_state <- Ethnicity_state %>% na.omit() %>% mutate(across(ethnic,sum,.names = "sum.{.col}"))
+Ethnicity_state_pct <- Ethnicity_state %>% mutate(Pacific.pct=Pacific/sum.Pacific) %>% mutate(Asian.pct=Asian/sum.Asian) %>% mutate(Native.pct=Native/sum.Native) %>% mutate(Hispanic.pct=Hispanic/sum.Hispanic) %>% mutate(White.pct=White/sum.White) %>%
+mutate(Black.pct=Black/sum.Black) %>% group_by(candidate) %>% summarise_at(c("Pacific.pct","Asian.pct","Native.pct","Hispanic.pct","White.pct","Black.pct"),sum)
+
+plot <- Ethnicity_state_pct %>% column_to_rownames(var = "candidate")
+plot <- gather(plot) %>% mutate(candidate=rep(c("Donald Trump","Joe Biden"),6))
+```
+
+```{r}
+ggplot(plot, aes(x="", y=value, group=candidate, color=candidate, fill=candidate)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start=0) + facet_wrap(~ key) +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.grid  = element_blank())+ 
+  geom_text(stat="identity",aes(y=value, label = scales::percent(value)), size=3, position=position_stack(vjust = 0.5),color="black") +
+  ggtitle("State Level Ethnicity Statistics in 2020 Election")
+```
+
+The pie charts above show the population percentage of 6 ethnicity groups in State level of taking the candidate with the highest proportion of votes. For example, the first pie chart (Asian) represents that among all the Asian population in all the states, the percentage of Asian in the states that vote Donald Trump with the highest proportion is about 20.1%, and percentage of Asian in the states that vote Joe Biden with the highest proportion is about 79.9%. Although it might not show causal link, we could still reasonably infer that compared to other ethnicity groups, Asian, Pacific, and Hispanic groups have less preference with Donald Trump, and thus have higher preference with Joe Biden.
+
+## Q10.
+```{r,fig.height=6,fig.width=10}
+census.clean <- 
+census %>% na.omit() %>% mutate(across(c("Men","Employed","VotingAgeCitizen"),~.x*100/TotalPop,.names = "{.col}")) %>% mutate(Minority=Hispanic+Black+Native+Asian+Pacific) %>% select(-Hispanic,-Black,-Native,-Asian,-Pacific) %>% select(-IncomeErr, -IncomePerCap, -IncomePerCapErr, -Walk, -PublicWork, -Construction) 
+psych::corPlot(census.clean[-c(1,2,3)])
+census.clean <- census.clean %>% select(-White,-TotalPop) ##Delete the White and TotalPop variable to decrease collinearity. 
+```
+```{r}
+head(census.clean,5)
+```
+
+According to the correlation plot, we find that among all the pairs of different variables, only two pairs White and Minority, and Women and TotalPop have really high correlation -1 and 1. Since the paired-variables White and Minority, and Women and TotalPop are perfectly collinear, then we want to delete either of them in each pair. (Here we delete the variable White and TotalPop).
+
+# Dimensionality reduction
+
+## Q11.
+```{r}
+pr.out <- prcomp(census.clean[-c(1,2,3)],scale.=TRUE,center = TRUE)
+pc.county <- pr.out$rotation[,1:2]
+as.data.frame(abs(pc.county[,1])) %>% arrange(desc(`abs(pc.county[, 1])`)) %>% top_n(3)
+```
+
+I chose to center and scale the features before running PCA. The first reason is that we should center the values of all of the input variables, making the mean of each variable equal to zero before running PCA. Secondarily, when we compare the variables Income, Women, and TotalPop to the rest of variables, we could easily find that the scale of those variables are much larger than the other variables'. Therefore, when dealing with data that has features with different scales, which means when data distribution is highly skewed, it's important for us to center and scale the data first before running PCA or the data that has larger values may sway the data and thus over affect the PCA results. 
+
+ChildPoverty, Poverty, and Employed are the three features with the largest absolute values of the first principal component.
+
+Among the three features, the signs of ChildPoverty and Poverty are negative and the sign of Employed is positive. Thus, Employed has opposite sign to the signs of ChildPoverty and Poverty. That also means that ChildPoverty and Poverty are positively correlated and Employed is negatively correlated to ChildPoverty and Poverty.
+
+## Q12.
+```{r}
+pr.var=pr.out$sdev^2
+pve=pr.var/sum(pr.var)
+plot(pve, xlab="Principal Component", 
+     ylab="Proportion of Variance Explained ",type='b')
+plot(cumsum(pve), xlab="Principal Component ", 
+     ylab=" Cumulative Proportion of Variance Explained ", ylim=c(0,1), type='b')
+min(which(cumsum(pve)>=0.9))
+```
+
+At least 13 PCs needed to capture 90% of the variance for the analysis.
+
+# Clustering
+
+## Q13.
+```{r dendogram, fig.height=6}
+census.dist = dist(census.clean[-c(1,2,3)])
+set.seed(123)
+census.hclust = hclust(census.dist)
+table(cutree(census.hclust, 10))
+pc.dist = dist(pr.out$x[,1:2])
+set.seed(123)
+pc.hclust = hclust(pc.dist)
+table(cutree(pc.hclust, 10))
+```
+
+When we cut the tree to partition the observations into 10 clusters for both census.hclust and pc.hclust, we could find that the hierarchical clustering with census.clean data set clusters a large amount of data into one cluster: there are 3114 observations put into the first cluster, and the rest of clusters only get a few observations. However, compared to the census.hclust, the hierarchical clustering with pcs could cluster the observations more separately into different clusters: there are 1559 observations in the first cluster, 981 in the third one, 239 in the fifth one, and so on. Therefore, the overall performance of the hierarchical clustering with pcs is much better in effectively divide the data into meaningful clusters, making the results more interpretative. 
+
+```{r}
+census.clean %>% filter(County=="Santa Barbara County")
+which(census.clean$County == "Santa Barbara County")
+cutree(census.hclust, 10)[228]
+cutree(pc.hclust, 10)[228]
+which(cutree(census.hclust, 10)==1) ## contain 516 518  520  522 and Santa Barbara
+which(cutree(pc.hclust, 10)==2) ## poor 516 518  520  522 poor
+```
+
+pc.clust seemed to put Santa Barbara County in a more appropriate clusters. As we look at into the two clusters Santa Barbara County belongs to in two hierarchical clusterings, we could find that Santa Barbara County belongs to the first cluster which contains 3114 (almost all the observations of the whole data set) in census.hclust, and it belongs to the first cluster which contains only 1559 observations in the pc.hclust. When we look at the other clusters in the pc.cluster, we could find that: for example, the second cluster contain Sumter County, Taliaferro County, Taylor County, Terrell County and so on in Georgia. The poverty in those counties are really high: 33.4, 31.0, 28.2, 35.3, etc., which indicates that those counties might have bad financial situation. However, in Santa Barbara County, the Poverty is about 15.4, which are much lower than the average poverty level of the counties in the second cluster. Thus, it is reasonable to separate Santa Barbara County from those counties. However, when we look at the cluster containing Santa Barbara County in census.clust, we find that all the counties that have bad financial situation we talked about above stay in the same cluster with Santa Barbara, which leads to a bad clustering result. 
+
+# Classification
+
+## Q14.
+```{r}
+# we move all state and county names into lower-case
+tmpwinner <- county.winner %>% ungroup %>%
+  mutate_at(vars(state, county), tolower)
+
+# we move all state and county names into lower-case
+# we further remove suffixes of "county" and "parish"
+tmpcensus <- census.clean %>% mutate_at(vars(State, County), tolower) %>%
+  mutate(County = gsub(" county|  parish", "", County)) 
+
+# we join the two datasets
+election.cl <- tmpwinner %>%
+  left_join(tmpcensus, by = c("state"="State", "county"="County")) %>% 
+  na.omit
+
+# drop levels of county winners if you haven't done so in previous parts
+election.cl$candidate <- droplevels(election.cl$candidate)
+
+## save meta information
+election.meta <- election.cl %>% select(c(county, party, CountyId, state, total_votes, pct, total))
+
+## save predictors and class labels
+election.cl = election.cl %>% select(-c(county, party, CountyId, state, total_votes, pct, total))
+head(election.cl,5)
+```
+
+We need to exclude the predictor party from election.cl, since one candidate has his own party different from the other candidate's, which means that given the information of party, we should perfectly classify the candidate. However we want to see if using census information in a county could predict the winner in that county, so we do not want to include the party information. Otherwise, when party could directly give us the good classification, we could not observe if census information could also predict the winner well.
+
+## Q15.
+```{r}
+set.seed(10) 
+n <- nrow(election.cl)
+idx.tr <- sample.int(n, 0.8*n) 
+election.tr <- election.cl[idx.tr, ]
+election.te <- election.cl[-idx.tr, ]
+set.seed(20) 
+nfold <- 10
+folds <- sample(cut(1:nrow(election.tr), breaks=nfold, labels=FALSE))
+calc_error_rate = function(predicted.value, true.value){
+  return(mean(true.value!=predicted.value))
+}
+records = matrix(NA, nrow=3, ncol=2)
+colnames(records) = c("train.error","test.error")
+rownames(records) = c("tree","logistic","lasso")
+```
+
+```{r}
+# Fit model on training set
+tree.election = tree(candidate~., data = election.tr)
+
+#set.seed
+set.seed(20)
+# K-Fold cross validation
+cv = cv.tree(tree.election, FUN=prune.misclass, K=10)
+best.cv = min(cv$size[cv$dev == min(cv$dev)])
+best.cv
+# Plot the complete tree
+draw.tree(tree.election, nodeinfo=TRUE, cex = 0.5)
+title("Classification Tree Built on Training Set")
+# Prune tree
+pt.cv = prune.misclass (tree.election, best=best.cv)
+# Plot pruned tree
+plot(pt.cv)
+text(pt.cv, pretty=0, col = "blue", cex = .5)
+title("Pruned tree of size 7")
+
+# Predict on training set
+pred.pt.train = predict(pt.cv, election.tr, type="class") 
+# train errors
+pt.train.er <- calc_error_rate(pred.pt.train,election.tr$candidate)
+# Predict on test set
+pred.pt.test = predict(pt.cv, election.te, type="class") 
+# test errors
+pt.test.er <- calc_error_rate(pred.pt.test,election.te$candidate)
+
+records[1,1]=pt.train.er
+records[1,2]=pt.test.er
+```
+
+From the decision tree analysis, we find that the tree of size 7 has the minimum CV estimate of test error rate with 10-fold cross-validation. After we pruned the tree of size 7, we could find that unemployment, VotingAgeCitizen, minority, Women, and Transit are several important variables that perform well in splitting the tree and affecting the error rate. The training error rate is about 0.08539, and the test error rate is about 0.10841.
+
+Voting Behavior: 1. Known that Transit is smaller than 1.35, if the Minority rate is lower than 48.55, then the county will prefer to vote Donald Trump. 2. Known that Transit is smaller than 1.35, the Minority rate is larger or equal than 48.55, and VotingAgeCitizen is smaller than 71.0364, if the unemployment rate is smaller than 11.6, the county will prefer to vote Donald Trump; 3. otherwise, if Unemployment is larger or equal to 11.6 keeping other conditions unchanged, the county will prefer to vote Joe Biden. 4. Known that Transit is smaller than 1.35, the Minority rate is larger or equal than 48.55, if VotingAgeCitizen is larger than or equal 71.0364, the county will prefer to vote Joe Biden. 5. Known that Transit is larger than or equal to 1.35, and the Women is lower than 99532.5, if Minority rate is lower than 5.4, then the county will prefer to vote Donald Trump; 6. otherwise, if Minority rate is larger than or equal to 5.4 with other conditions unchanged, then the county will prefer to vote Joe Biden. 7. Known that Transit is larger than or equal 1.35, if the Women is larger than or equal 99532.5, then the county will prefer to vote Joe Biden.
+
+## Q16.
+```{r}
+glm.fit = glm(candidate ~., data=election.tr, family=binomial)
+# Predict on training set
+pred.lg.train = predict(glm.fit,newdata = election.tr, type="response")
+# Save the predicted labels using 0.5 as a threshold
+pred.lg.train.threshold <- data.frame(matrix(ncol = 1, nrow = nrow(election.tr)))
+pred.lg.train.threshold = pred.lg.train.threshold %>%
+  mutate(pred=as.factor(ifelse(pred.lg.train<=0.5, "Donald Trump", "Joe Biden")))
+# train errors
+lg.train.er <- calc_error_rate(pred.lg.train.threshold$pred,election.tr$candidate)
+
+# Predict on test set
+pred.lg.test = predict(glm.fit, newdata = election.te, type="response")
+# Save the predicted labels using 0.5 as a threshold
+pred.lg.test.threshold <- data.frame(matrix(ncol = 1, nrow = nrow(election.te)))
+pred.lg.test.threshold = pred.lg.test.threshold %>%
+  mutate(pred=as.factor(ifelse(pred.lg.test<=0.5, "Donald Trump", "Joe Biden")))
+# test errors
+lg.test.er <- calc_error_rate(pred.lg.test.threshold$pred,election.te$candidate)
+
+records[2,1]=lg.train.er
+records[2,2]=lg.test.er
+
+summary(glm.fit)
+```
+
+The training error rate is about 0.06839, and the test error rate is about 0.06311. Women, VotingAgeCitizen, Transit, Employed, Unemployment, Minority, Professional, Service, Office, Production, and Drive are the significant variables with the threshold of 0.01. It includes all the significant variables got from decision tree, and it additionally includes 6 more variables (Professional, Service, Office, Production, Employed, and Drive) that are not included in the decision tree nodes. 
+
+By increasing one unit in Minority, conditional on the other predictors unchanged, it means multiply the odds of $Pr(Y=\text{Joe Biden}|X)$ by $e^{0.123}$. By increasing one unit in Drive, conditional on the other predictors unchanged, it means multiply the odds of $Pr(Y=\text{Joe Biden}|X)$ by $e^{-0.1016}$. The intercept coefficient means that the logit of $Pr(Y=\text{Joe Biden}|X=0)$ equals to -51.39.
+
+## Q17.
+```{r}
+x.train <- model.matrix(candidate~., election.tr)
+x.test <- model.matrix(candidate~., election.te)
+lambda = seq(1, 50) * 1e-4
+lasso.mod <- glmnet(x.train, election.tr$candidate, alpha=1, lambda=lambda,family = "binomial")
+set.seed(20)
+cv.out.lasso = cv.glmnet(x.train, election.tr$candidate, alpha = 1,nfolds = 10,lambda = lambda,family="binomial")
+bestlam = cv.out.lasso$lambda.min
+bestlam
+predict(lasso.mod,type="coefficients",s=bestlam)
+
+##Predict on training set
+lasso.train.pred = predict(lasso.mod, s = bestlam, newx = x.train,type = "response")
+# Save the predicted labels using 0.5 as a threshold
+pred.la.train.threshold <- data.frame(matrix(ncol = 1, nrow = nrow(election.tr)))
+pred.la.train.threshold = pred.la.train.threshold %>%
+  mutate(pred=as.factor(ifelse(lasso.train.pred<=0.5, "Donald Trump", "Joe Biden")))
+# train errors
+la.train.er <- calc_error_rate(pred.la.train.threshold$pred,election.tr$candidate)
+
+##Predict on test set
+lasso.test.pred = predict(lasso.mod, s = bestlam, newx = x.test,type = "response")
+# Save the predicted labels using 0.5 as a threshold
+pred.la.test.threshold <- data.frame(matrix(ncol = 1, nrow = nrow(election.te)))
+pred.la.test.threshold = pred.la.test.threshold %>%
+  mutate(pred=as.factor(ifelse(lasso.test.pred<=0.5, "Donald Trump", "Joe Biden")))
+# test errors
+la.test.er <- calc_error_rate(pred.la.test.threshold$pred,election.te$candidate)
+
+records[3,1]=la.train.er
+records[3,2]=la.test.er
+
+records
+```
+
+The the optimal value of $\lambda=$ in cross validation is about 0.0008. The variables with non-zero coefficients are Women, VotingAgeCitizen, Poverty, Professional, Service, Office, Production, Drive, Carpool, Transit, OtherTransp, WorkAtHome, MeanCommute, Employed, PrivateWork, SelfEmployed, FamilyWork, and Unemployment. Compared to the logistic regression that have all non-zero coefficients, lasso regression shrinks the coefficients of Men, Income, and ChildPoverty to zero. With the best lambda, 0.0008, Men, Income, and ChildPoverty are less contributing variables comparing to all other variables. Thus, we shrink the coefficients of those two variables to zero and remove them from the model to select the model that performs better.
+
+The training error rate is about 0.06677, and the test error rate is about 0.06472. Compared the test error rate of logistic regression and lasso regression together, we could find it is 0.0631 for logistic and 0.06472 for lasso. Although lasso gets a slightly higher test error rate, we could decrease the complexity of the model and avoid the overfitting problem. Thus, lasso regression also performs well in model selection in this case. 
+
+## Q18.
+```{r}
+pred.lg <- prediction(pred.lg.test,election.te$candidate)
+perf.lg = performance(pred.lg, measure="tpr", x.measure="fpr")
+pred.la <- prediction(lasso.test.pred,election.te$candidate)
+perf.la = performance(pred.la, measure="tpr", x.measure="fpr")
+pred.tree <- prediction(predict(pt.cv,newdata = election.te, type="vector")[,2],election.te$candidate)
+perf.tree = performance(pred.tree, measure="tpr", x.measure="fpr")
+plot(perf.lg, col=2, lwd=4, main="ROC curve",)
+plot(perf.la, add = TRUE, col=3, lwd=2)
+plot(perf.tree, add = TRUE, col=4, lwd=2)
+abline(0,1)
+```
+
+Pros of decision tree is that it is more interpretable than the other two methods and it is very easy to get the prediction results without too much computation. The cons of decision tree is that it has lower prediction accuracy than the other two methods, which could be observed both from the record table and the lowest AUC above. Logistic regression and Lasso Logistic regression methods have a better accuracy in predictions of winners, observed by their lower train and test error rates. The cons of those two regression methods is that they are less interpretable and more complex than the decision tree. Especially for the Logistics regression, it even has the risk of overfitting. Compared to Logistics regression, Lasso Logistic regression balances the trade-off in some extent: it gets a slightly higher test error, but it avoids the problem of overfitting by decreasing the flexibility. 
+Different classifiers are more appropriate for answering different kinds of questions about the election. For lasso logistic regression and logistics regression methods, we can apply them to predict the specific probability with higher accuracy. Besides, we could also answer how each predictor variable related to the prediction results and even interpret the meaning of the significant coefficients in terms of a unit change. The decision tree could clearly tell us which variable is significant in the prediction. Also, we could describe the election behavior and get the prediction results very easily without computation. We could as well tell the splitting value related to prediction results for each significant variable by finding the value at each node. 
+
+# Q19. 
+
+## Random Forest and SVM
+```{r}
+##1. random forest
+set.seed(20)
+rf.election = randomForest(candidate~., data= election.tr, importance=TRUE)
+rf.election
+importance(rf.election)
+varImpPlot(rf.election, sort=T, main="Variable Importance for rf.election", n.var=5)
+```
+
+```{r}
+#Random Forest:
+# Predict on training set 
+pred.rf.train = predict(rf.election, newdata = election.tr)
+# train errors
+rf.train.er <- calc_error_rate(pred.rf.train,election.tr$candidate)
+# Predict on test set
+pred.rf.test = predict(rf.election, newdata = election.te) 
+# test errors
+rf.test.er <- calc_error_rate(pred.rf.test,election.te$candidate)
+
+records2 = matrix(NA, nrow=2, ncol=2)
+colnames(records2) = c("train.error","test.error")
+rownames(records2) = c("Random Forest","SVM")
+
+records2[1,1]=rf.train.er
+records2[1,2]=rf.test.er
+records.all <- rbind(records, records2[1, ])
+rownames(records.all)[4] = "Random Forest"
+records.all
+```
+
+With the Random Forest Method,we used 500 trees to fit the data. The out-of-bag estimate of error is about 6.72%. Four variables are randomly considered at each split in the trees. By checking the variable importance, we find that the order of the most important variable is Minority, Transit, Women, Professional, and Unemployment according to Mean Decrease Accuracy, which is pretty similar to the list of important variable we got from decision tree above. The only difference is that there is Professional as the top-five important variable in random forest but not in decision tree. Professional also appears as a critical variable in both lasso regression method and logistic regression method. 
+
+Comparing the training and test error rate of random forest method to the three methods above, we could find that the random forest method has the lowest traning error rate, which is about 0, and the lowest test error rate at the same time. Also, the test error rate 0.0599 is very close to OOB estimate of error rate 0.0672, which also shows that OOB error rate is a good estimation of test error rate. Although generating the results of random forest costs slightly longer time, it performs better than the three methods above.
+
+```{r,cache=TRUE}
+##2. SVM
+## Cross-validation using `tune` to select the best choice of $\gamma$ and `cost` for an SVM with a radial kernel
+set.seed(20)
+cost.grid=c(0.5,1,5,10,25)
+gamma.grid=c(0.05,0.1,0.25,0.5,1)
+tune.out=tune(svm, candidate~., data=election.tr, kernel="radial", ranges=list(cost=cost.grid,gamma=gamma.grid))
+summary(tune.out)$"best.parameters"
+summary(tune.out)$"best.performance"
+bestmod=tune.out$best.model
+summary(bestmod)
+
+# Predict on training set 
+pred.svm.train = predict(bestmod,newdata=election.tr)
+# train errors
+svm.train.er <- calc_error_rate(pred.svm.train,election.tr$candidate)
+# Predict on test set
+pred.svm.test = predict(bestmod,newdata=election.te)
+# test errors
+svm.test.er <- calc_error_rate(pred.svm.test,election.te$candidate)
+records2[2,1]=svm.train.er
+records2[2,2]=svm.test.er
+records.all <- rbind(records.all, records2[2, ])
+rownames(records.all)[5] = "SVM"
+records.all
+```
+
+With the SVM Method, we use kernel = "radial" to perform the cross validation to tune out the tuning parameter $\gamma$ and cost with the grid (0.5,1,5,10,25) for cost and (0.05,0.1,0.25,0.5,1) for gamma. When the cost argument is small, then the margins will be wide and many support vectors will be on the margin or will violate the margin. When the cost argument is large, then the margins will be narrow and there will be few support vectors on the margin or violating the margin. If we increase the value of cost, we can reduce the number of training errors. However, this comes at the price of a more irregular decision boundary that seems to be at risk of overfitting the data. Thus, we will not try to include a very large value of cost in the grid while tuneing out the best choice.
+
+The result show that $\gamma$=0.05 and cost=1 gives us the best model with the performance=0.07, and Number of Support Vectors=653. Comparing the training and test error rate of random forest method to the three methods (logistic, lasso, and decision tree) above, we could find that the SVM method has the lowest test error rate 0.0599, which equals to the test error rate of random forest method. Therefore, both random forest method and SVM method perform the best among all the five methods. However, it takes us a long time to tune out the good parameters in SVM methods. Therefore, if we consider the time cost, random forest is better than SVM and other three methods on this data set, since it could achieve the lowest test error rate in a short time. 
+
+# Q20.
+
+## Test the Performance of Classification Methods with PCA 
+
+```{r}
+## Create a new records table to record the error rate computed with PC data set.
+records.pc = matrix(NA, nrow=3, ncol=2)
+colnames(records.pc) = c("train.error","test.error")
+rownames(records.pc) = c("tree","logistic","lasso")
+
+## Running PCA on the data set
+pca.election <- prcomp(election.cl[-1],scale.=TRUE,center = TRUE)
+pca.el.var=pca.election$sdev^2
+pve.el=pca.el.var/sum(pca.el.var)
+## At least 19 PCs could capture 99% of the variance for the analysis
+min(which(cumsum(pve.el)>=0.99))
+
+## Generate the training data set with PCs to capture 99% of the variance for the analysis
+election.tr.pca.x <- pca.election$x[idx.tr, 1:19]
+election.tr.pca <- cbind(election.tr[1],election.tr.pca.x)
+head(election.tr.pca,5)
+
+## Generate the test data set with PCs to capture 99% of the variance for the analysis
+election.te.pca.x <- pca.election$x[-idx.tr, 1:19]
+election.te.pca <- cbind(election.te[1],election.te.pca.x)
+head(election.te.pca,5)
+```
+
+Firstly, we create a new records table to record the error rate computed with PC data set. Then, we run PCA on the election.cl data set without the response variable candidate. In order to ensure the test accuracy, we want to preserve as much information as possible on the basis of dimensionality reduction. In other word, we want to capture higher variance for the analysis and reduce the dimension of variables at the same time. Therefore, we try to capture 99% of the variance for the analysis, and we find that at least 19 PCs could capture 99% of the variance. In this case, we can reduce the dimension from $p=22$ to $d=18$, which achieves our goal. Then, we will try to fit models of decision tree, logistic, and lasso logistic methods with the lower dimensional data set and compute the error rates below.
+
+```{r}
+# Decision Tree
+tree.election.pca = tree(candidate~., data = election.tr.pca)
+
+#set.seed
+set.seed(20)
+# K-Fold cross validation
+cv = cv.tree(tree.election.pca, FUN=prune.misclass, K=10)
+best.cv = min(cv$size[cv$dev == min(cv$dev)])
+best.cv
+
+# Prune tree
+pt.cv = prune.misclass (tree.election.pca, best=best.cv)
+# Plot pruned tree
+plot(pt.cv)
+text(pt.cv, pretty=0, col = "blue", cex = .5)
+title("Pruned tree of size 6")
+
+# Predict on training set
+pred.pt.train.pca = predict(pt.cv, election.tr.pca, type="class") 
+# train errors
+pt.train.pca.er <- calc_error_rate(pred.pt.train.pca,election.tr.pca$candidate)
+# Predict on test set
+pred.pt.test.pca = predict(pt.cv, election.te.pca, type="class") 
+# test errors
+pt.test.pca.er <- calc_error_rate(pred.pt.test.pca,election.te.pca$candidate)
+
+records.pc[1,1] <- pt.train.pca.er
+records.pc[1,2] <- pt.test.pca.er
+```
+
+From the decision tree analysis, we find that the tree of size 6 has the minimum CV estimate of test error rate with 10-fold cross-validation. The pruned tree is ploted above. The training error rate is about 0.08701, and the test error rate is about 0.08414.
+
+```{r}
+## Logistics Regression
+glm.fit.pca = glm(candidate ~., data=election.tr.pca, family=binomial)
+summary(glm.fit.pca)
+# Predict on training set
+pred.lg.train.pca = predict(glm.fit.pca,newdata = election.tr.pca, type="response")
+# Save the predicted labels using 0.5 as a threshold
+pred.lg.train.threshold.pca <- data.frame(matrix(ncol = 1, nrow = nrow(election.tr.pca)))
+pred.lg.train.threshold.pca = pred.lg.train.threshold.pca %>%
+  mutate(pred=as.factor(ifelse(pred.lg.train.pca<=0.5, "Donald Trump", "Joe Biden")))
+# train errors
+lg.train.pca.er <- calc_error_rate(pred.lg.train.threshold.pca$pred,election.tr.pca$candidate)
+
+# Predict on test set
+pred.lg.test.pca = predict(glm.fit.pca, newdata = election.te.pca, type="response")
+# Save the predicted labels using 0.5 as a threshold
+pred.lg.test.threshold.pca <- data.frame(matrix(ncol = 1, nrow = nrow(election.te.pca)))
+pred.lg.test.threshold.pca = pred.lg.test.threshold.pca %>%
+  mutate(pred=as.factor(ifelse(pred.lg.test.pca<=0.5, "Donald Trump", "Joe Biden")))
+# test errors
+lg.test.pca.er <- calc_error_rate(pred.lg.test.threshold.pca$pred,election.te.pca$candidate)
+
+records.pc[2,1] <- lg.train.pca.er
+records.pc[2,2] <- lg.test.pca.er
+```
+
+From the logistic regression, we find that the training error rate is about 0.07163, and the test error rate is about 0.06149.
+
+```{r}
+## Lasso Regression
+x.train.pca <- model.matrix(candidate~., election.tr.pca)
+x.test.pca <- model.matrix(candidate~., election.te.pca)
+lambda = seq(1, 50) * 1e-4
+lasso.mod.pca <- glmnet(x.train.pca, election.tr.pca$candidate, alpha=1, lambda=lambda,family = "binomial")
+set.seed(20)
+cv.out.lasso = cv.glmnet(x.train.pca, election.tr.pca$candidate, alpha = 1,nfolds = 10,lambda = lambda,family="binomial")
+bestlam = cv.out.lasso$lambda.min
+bestlam
+predict(lasso.mod.pca,type="coefficients",s=bestlam)
+
+##Predict on training set
+lasso.train.pred.pca = predict(lasso.mod.pca, s = bestlam, newx = x.train.pca,type = "response")
+# Save the predicted labels using 0.5 as a threshold
+pred.la.train.threshold.pca <- data.frame(matrix(ncol = 1, nrow = nrow(election.tr.pca)))
+pred.la.train.threshold.pca = pred.la.train.threshold.pca %>%
+  mutate(pred=as.factor(ifelse(lasso.train.pred.pca<=0.5, "Donald Trump", "Joe Biden")))
+# train errors
+la.train.er.pca <- calc_error_rate(pred.la.train.threshold.pca$pred,election.tr.pca$candidate)
+
+##Predict on test set
+lasso.test.pred.pca = predict(lasso.mod.pca, s = bestlam, newx = x.test.pca,type = "response")
+# Save the predicted labels using 0.5 as a threshold
+pred.la.test.threshold.pca <- data.frame(matrix(ncol = 1, nrow = nrow(election.te.pca)))
+pred.la.test.threshold.pca = pred.la.test.threshold.pca %>%
+  mutate(pred=as.factor(ifelse(lasso.test.pred.pca<=0.5, "Donald Trump", "Joe Biden")))
+# test errors
+la.test.er.pca <- calc_error_rate(pred.la.test.threshold.pca$pred,election.te.pca$candidate)
+
+records.pc[3,1] <- la.train.er.pca
+records.pc[3,2] <- la.test.er.pca
+records.pc
+```
+
+From the lasso logistic regression, we find that with $\lambda=0.001$ the training error rate is about 0.07001, and the test error rate is about 0.05987.
+
+Firstly, for the decision tree method, it pruned the tree of size of 7 with the original data set and pruned the tree of size of 6 with the PC data set. The complexity decreases but the tree fitted on PC data set could not help us interpret the voting behavior, since it is hard and less meaningful to interpret the relationship of each principle component node with the prediction results. Compared to the original data set, the test error rate of decision tree fitted with the PC data set significantly decrease about 20% (from 0.1084 to 0.0841). Therefore, if we ignore interpreting the voting behavior, the model trained on PC data set largely improves classification performance. Then, for the logistic regression, the complexity decreases since the dimensionality is decreased. Compared to the original data set, the test error rate of logistics regression fitted with the PC data set also decreases from 0.0631 to 0.0615. Thus, the model trained on PC data set also improves classification performance with this method. Finally, for the lasso logistic regression, there are 19 variables with non-zero coefficients in the model trained with original data set, and there are 18 variables with non-zero coefficients in the model trained with PC data set. Thus, the complexity decreases in ths case, too. Compared to the original data set, the test error rate of lasso logistics regression fitted with the PC data set decreases from 0.0647 to 0.0599, so it as well improves the classification performance. In summary, for all the three methods, the models trained on PC data set that captures 99% of the variance of the analysis could both decrease the complexity and test error rate. Thus, we concludes that training on the data set after running PCA to capture very high percentage (for example, 99%) of the variance could improve classification performance in some extent on this data set. 
+
+# Q21.
+
+```{r}
+test.meta <- election.meta[-idx.tr, ] %>% select(c(state, county))
+train.meta <- election.meta[idx.tr, ] %>% select(c(state, county))
+test <- cbind(test.meta,election.te)
+train <- cbind(train.meta,election.tr)
+
+## Decision Tree
+tree.test.err.idx <- which((pred.pt.test==election.te$candidate)==FALSE)
+tree.train.err.idx <- which((pred.pt.train==election.tr$candidate)==FALSE)
+
+## Test data set
+tree.te <- test %>% mutate(Accuracy=TRUE)
+## Mark the counties that have prediction error
+tree.te$Accuracy[tree.test.err.idx]=FALSE
+join_tree.te <- left_join(tree.te,counties,by=c("state"="region","county"="subregion"))
+
+## Training data set
+tree.tr <- train %>% mutate(Accuracy=TRUE)
+## Mark the counties that have prediction error
+tree.tr$Accuracy[tree.train.err.idx]=FALSE
+join_tree.tr <- left_join(tree.tr,counties,by=c("state"="region","county"="subregion"))
+
+join_tree <- rbind(join_tree.te,join_tree.tr)
+
+ggplot(data = join_tree) + 
+  geom_polygon(aes(x = long, y = lat, fill = Accuracy, group = group),
+               color = "white") + 
+  coord_fixed(1.3) +
+  ggtitle("Errors (train & test) Visualization of Decision Tree")
+```
+
+```{r}
+## Logistic Regression
+lg.test.err.idx <- which((pred.lg.test.threshold$pred==election.te$candidate)==FALSE)
+lg.train.err.idx <- which((pred.lg.train.threshold$pred==election.tr$candidate)==FALSE)
+
+## Test data set
+lg.te <- test %>% mutate(Accuracy=TRUE)
+## Mark the counties that have prediction error
+lg.te$Accuracy[lg.test.err.idx]=FALSE
+join_lg.te <- left_join(lg.te,counties,by=c("state"="region","county"="subregion"))
+
+## Training data set
+lg.tr <- train %>% mutate(Accuracy=TRUE)
+## Mark the counties that have prediction error
+lg.tr$Accuracy[lg.train.err.idx]=FALSE
+join_lg.tr <- left_join(lg.tr,counties,by=c("state"="region","county"="subregion"))
+
+join_lg <- rbind(join_lg.te,join_lg.tr)
+
+ggplot(data = join_lg) + 
+  geom_polygon(aes(x = long, y = lat, fill = Accuracy, group = group),
+               color = "white") + 
+  coord_fixed(1.3) +
+  ggtitle("Errors (train & test) Visualization of Logistic Regression")
+```
+
+```{r}
+## Lasso Logistic Regression
+la.test.err.idx <- which((pred.la.test.threshold$pred==election.te$candidate)==FALSE)
+la.train.err.idx <- which((pred.la.train.threshold$pred==election.tr$candidate)==FALSE)
+
+## Test data set
+la.te <- test %>% mutate(Accuracy=TRUE)
+## Mark the counties that have prediction error
+la.te$Accuracy[la.test.err.idx]=FALSE
+join_la.te <- left_join(la.te,counties,by=c("state"="region","county"="subregion"))
+
+## Training data set
+la.tr <- train %>% mutate(Accuracy=TRUE)
+## Mark the counties that have prediction error
+la.tr$Accuracy[la.train.err.idx]=FALSE
+join_la.tr <- left_join(la.tr,counties,by=c("state"="region","county"="subregion"))
+
+join_la <- rbind(join_la.te,join_la.tr)
+
+ggplot(data = join_la) + 
+  geom_polygon(aes(x = long, y = lat, fill = Accuracy, group = group),
+               color = "white") + 
+  coord_fixed(1.3) +
+  ggtitle("Errors (train & test) Visualization of Lasso Logistic Regression")
+```
+
+The visualization of both training and test errors of the three classification methods are plot above. The red region represents the counties where the models make the wrong prediction. In the contrast, the blue region represents the counties where the models make the correct prediction. Just like the records table, the map of decision tree method has more red region than other two, and thus this method has the highest test error rate. The map of logistic regression and lasso regression are overall very similar. I think it is reasonable to observe such similarity and difference between three maps, since the decision tree method is less inflexible so it is more interpretable in observing voting behavior but has so-so prediction accuracy; the logistics and lasso logistics methods have more similar algorithm so their error map is more similar and they are more complex so that they result in relatively higher prediction accuracy. 
+
+Look into the details of the map, there are a lot of regions in Utah and Idaho, which doesn't occur in the logistic and lasso logistic map, which means that decision tree methods make more wrong prediction in this two states. Look at the details census information of those two states, we find that a lot of wrong predictions classify the counties, which should have supported Donald Trump, to support Joe Biden on the contrary. When looking at the overall preference of those two states, we find that the counties of those states have really high preference for Donald Trump, and when we look at the maps of logistic and lasso logistic regression, those errors seldom appear. In this case, we infer that the wrong predictions of those counties in decision tree might not be caused by outlier or unobserved variables, but might be caused by the shortcomings of the decision tree method itself. For example, a small change in the data can cause a large change in the structure of the decision tree causing instability. Therefore, the structure of our tree might be sensitive to some data that significantly affects the model and cause more prediction errors. Besides, it might also be caused by other shortcomings of the decision tree. For example, when we build the tree, we could only use recursive binary splitting rather than all possible combinations because of computational infeasibility. Therefore, probably some other ways of constructing regions that result in a better prediction model include some other significant variables that are excluded from our pruned tree. However, logistic regression could use all the variables to make the predictions and the analysis above also show that logistic and lasso regression have much more significant variables than decision tree. Thus, it is reasonable that those error only exist in decision tree but not in the other two methods.
+
+Of course, we also notice that there are some red regions that appear in all three maps, which means that three methods make the same error even with different algorithms. For example, all three methods make wrong predictions in elko county in 	
+Nevada, which should have supported Donald Trump rather than Joe Biden. Looking at other observations in Nevada, we find that Nevada state also has high preference for Donald Trump, and thus it is not surprising elko county also supports Nevada. In this case, it is not that reasonable to find the problem in the method itself. Therefore, we have to find the problems in other aspects that lead to the misclassification, and propose possible directions to increase the accuracy. For example, it might because the variables included in census data set are not that sufficient to make the predictions with higher accuracy. In this case, we could try to collect more data and variables such as Health Condition, Marital Satisfaction, Satisfaction Level with the State the county belongs to, and so on. More variable might help increase the prediction accuracy. Besides expanding the data set, we could also explore more in other classifiers rather than the existing three, such as Convolutional Neural Networks (CNN) and Recurrent Neural Networks (RNN). Therefore, we could try to expand the data set and explore more advanced methods in future study. 
+
+
+
+
+
+
+
+
+
+
