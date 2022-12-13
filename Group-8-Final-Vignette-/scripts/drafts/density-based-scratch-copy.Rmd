@@ -1,0 +1,146 @@
+---
+title: "density-based scratch copy"
+author: "Ruoxin Wang"
+date: "2022-12-04"
+output: html_document
+---
+
+# Density-based clustering
+
+Unlike the other two algorithms that mainly derive from the how computer calculated the clusters, the basic idea behind the [density-based clustering approach](https://developers.google.com/machine-learning/clustering/clustering-algorithms) is derived from a human intuitive clustering method. It means that the results of clustering calculated from a density-based method would be similar to how people classify the clusters through graphs only based on their eyes. For example, looking at the figure below, it is easy for us to identify the different clusters only based on our eyes because of the various dense regions of points on the graph.
+
+[![](images/dbscan-idea-01.png)](https://www.datanovia.com/en/lessons/dbscan-density-based-clustering-essentials/)
+
+## DBSCAN algorithm
+
+[DBSCAN](https://www.geeksforgeeks.org/dbscan-clustering-in-r-programming/), or "Density-Based Spatial Clustering of Applications with Noise", is a commonly used unsupervised clustering Machine Learning algorithm for density-based clustering approach. The idea that uses are density reachability and connectivity. The data would be divided into clusters with similar characteristics. However, unlike the hierarchical clustering, the number of clusters do not needed to be specified in advance. A cluster is defined as a maximum set of densely connected points. It discovers clusters of arbitrary shapes in spatial databases with noise.
+
+## Important concepts
+
+[![](images/dbscan-concept.png)](https://towardsdatascience.com/explaining-dbscan-clustering-18eaf5c83b31)
+
+Two required parameters in the DBSCAN algorithm are:
+
+-   [*eps*](https://towardsdatascience.com/explaining-dbscan-clustering-18eaf5c83b31) : Eps stands for "Epsilon", which stands for the maximum radius of the neighborhood or the clusters, and is shown as the blue line in the above figure. The data points will be included in the clusters if their mutual distance is less than or equal to the value of epsilon. For the DBSCAN algorithm, larger eps will create broader clusters, which contains more data points; smaller eps will narrow clusters, which contains less data points. However, if eps is chosen too small for the dataset, a large part of the data points would be considered as the noise points and not be included in the clusters; if eps is chosen too large for the dataset, clusters will be merged and the majority of the data points will be included in one same cluster.
+
+-   [*MinPts*](http://www.sefidian.com/2020/12/18/how-to-determine-epsilon-and-minpts-parameters-of-dbscan-clustering/): MinPts stands for "the minimum number of data points contains within the radius of a neighborhood" to be considered as a cluster, which is the value of 4 in the above figure. In the DBSCAN algorithm, the value MinPts should be at least 3 to be used as a valid value. A smaller value of MinPts used, more clusters and more outliers will be produced; a larger value of MinPts used, more robust clusters will be created.
+
+By changing the above two hyperparameter, the result of clustering may be varied.
+
+Other important terms to understand how DBSCAN works are:
+
+-   [*Core points*](https://www.dominodatalab.com/blog/topology-and-density-based-clustering): A point is a core point if it has more than MinPts points within eps, which is randomly selected in the algorithm and is the foundation of the clusters, which are the green points shown in the above figure.
+
+-   [*Border points*](https://www.dominodatalab.com/blog/topology-and-density-based-clustering): A point is included in the neighborhoods or the clusters that is not the core points, which are the red points shown in the above figure.
+
+-   [*Noise points/ Outliers*](https://www.geeksforgeeks.org/dbscan-clustering-in-ml-density-based-clustering/): The points that are neither core points nor are they close enough to a cluster to be defined as border points. Noise points are not assigned to any clusters and sometimes may be considered as anomalous points in the dataset, which are the grey points shown in the above figure.
+
+## Determining best parameters
+
+### Determining eps: Elbow Method
+
+In the DBSCAN algorithm, the best eps value is commonly found with a [k-distance graph](https://towardsdatascience.com/explaining-dbscan-clustering-18eaf5c83b31), where the value of k should equal to the value of MinPts. For this graph, x-axis contains all data points in the dataset and y-axis stands for the average distances of the data points. The best eps may chosen by looking at the elbow of the k-distance line. For example, after scaling our data, it plots a k-distance graph with a k value of 5 below. From this plot, if we choose MinPts equal to 5, the value of eps should be between 2 to 4.
+
+```{r}
+#install.packages("fpc")
+#install.packages("dbscan")
+#install.packages("factoextra")
+scale.df <- df %>% scale()
+df.matrix <- as.matrix(scale.df)
+kNNdistplot(df.matrix, k=5)
+abline(h=2.5, col="red")
+```
+
+### Determining MinPts
+
+-   [Approach 1](http://www.sefidian.com/2020/12/18/how-to-determine-epsilon-and-minpts-parameters-of-dbscan-clustering/): According to a rule of thumb, the best value of MinPts can be determined by the value of the number of dimensions D in the data set, which means that ${MinPts}\geq\text{D} + 1$. And in general, the value of MinPts should be ${MinPts} = \text{D} * 2$. For our data set, the dimensionality is 9 so the best MinPts should be 18 with this approach.
+
+-   [Approach 2](https://stackoverflow.com/questions/12893492/choosing-eps-and-minpts-for-dbscan-r): Under the most cases which we do not know the domain knowledge, we can also find the best value of MinPts by $ln(n)$, where n is the number of points that needed to be clustered. For our data set, the n should be 167 and the MinPts should be 5 or 6 with this approach.
+
+## Tuning parameters {.tabset}
+
+### eps = 3, MinPts = 18
+
+```{r}
+set.seed(1)
+db <- fpc::dbscan(scale.df, eps = 3, MinPts = 18)
+
+fviz_cluster(db, data = scale.df, stand = FALSE,
+             ellipse = FALSE, show.clust.cent = FALSE,
+             geom = "point",palette = "jco", ggtheme = theme_classic())
+```
+
+*For this plot, we select the value of MinPts based on the first approach, which produces only one cluster.*
+
+### eps = 3, MinPts = 5
+
+```{r, warning = FALSE}
+set.seed(1)
+db1 <- dbscan(scale.df, eps = 3, MinPts = 5)
+
+fviz_cluster(db1, data = scale.df, stand = FALSE,
+             ellipse = FALSE, show.clust.cent = FALSE,
+             geom = "point",palette = "jco", ggtheme = theme_classic())
+```
+
+*For this plot, we select the value of MinPts based on the second approach, which produces only one cluster.*
+
+### eps = 6, MinPts = 5
+
+```{r}
+set.seed(1)
+db <- fpc::dbscan(scale.df, eps = 6, MinPts = 5)
+
+fviz_cluster(db, data = scale.df, stand = FALSE,
+             ellipse = FALSE, show.clust.cent = FALSE,
+             geom = "point",palette = "jco", ggtheme = theme_classic())
+```
+
+*For this plot, as eps becomes larger, more noise points are also included in the cluster.*
+
+### eps = 1, MinPts = 5
+
+```{r}
+set.seed(1)
+db <- fpc::dbscan(scale.df, eps = 1, MinPts = 5)
+
+fviz_cluster(db, data = scale.df, stand = FALSE,
+             ellipse = FALSE, show.clust.cent = FALSE,
+             geom = "point",palette = "jco", ggtheme = theme_classic())
+```
+
+*For this plot, as eps becomes smaller, more clusters exists. However, most of data points also be excluded from those clusters and become noise points.*
+
+## Final combination: eps = 3, MinPts = 5
+
+After comparing the results of different combinations of eps and MinPts, we decided to use the one with eps = 3 and MinPts = 5 as our final parameter combination.
+
+## Check PCA
+
+Since we only got one cluster for this algorithm, we can further use PCA to check if this cluster pattern is correct or not.
+
+```{r}
+# check PCA
+pr.out <- prcomp(scale.df,
+                 scale =TRUE,
+                 center = TRUE)
+
+plot(pr.out$x[,1], pr.out$x[,2],
+     xlab = 'PC1', ylab = 'PC2')
+```
+
+After checking the [PCA](https://stackoverflow.com/questions/48051800/why-dbscan-clustering-returns-single-cluster-on-movie-lens-data-set) plot, it is easy to see that PCA plot also got a dense single group on the graph, which may be the reason why we only got one single cluster in DBSCAN.
+
+## Map clusters
+
+```{r, out.width='150%'}
+# add country names to clusters
+db_clust <- db1$cluster
+names(db_clust) <- row.names(df)
+
+# plot map clusters
+db_clust %>%
+  clust_to_df() %>%
+  rename_countries() %>%
+  plot_map()
+```

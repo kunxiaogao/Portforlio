@@ -1,0 +1,704 @@
+---
+title: "Clustering Analysis on Country Data"
+output:
+  html_document:
+    code_folding: show
+    toc: yes
+    toc_float: yes
+---
+
+```{=html}
+<style>
+pre code, pre, code {
+  white-space: pre !important;
+  overflow-x: scroll !important;
+  word-break: keep-all !important;
+  word-wrap: initial !important;
+}
+</style>
+```
+
+```{r, include=FALSE}
+# set code chunk options
+knitr::opts_chunk$set(echo = TRUE, 
+                      fig.align = 'center',
+                      cache = TRUE)
+
+# allow scrolling for long code
+options(width = 200)
+```
+
+# Introduction
+
+In unsupervised learning methods, inferences are drawn from data that do not contain a labeled output variable. These techniques allow us to analyze multivariate data sets and find interesting relationships between observations. **Clustering** is a type of unsupervised machine learning method that involves dividing the data set into a certain number of groups/clusters (denoted by $k$) in such a manner that the data points belonging to a cluster have similar characteristics. The clusters are regions where the density of similar data points is high. As a result, the distance between data points in a cluster is minimal.
+
+The inferences that are drawn from the data are subjective as there is no universal criterion for "good" clustering. The type of algorithm we use determines how the clusters will be created. In this vignette, we will mainly focus on three specific types:
+
+- Hierarchical clustering
+- Model-based clustering
+- Density-based clustering
+
+To demonstrate each of these clustering methods, we will use a [country-level data set from Kaggle]((https://www.kaggle.com/data sets/rohan0301/unsupervised-learning-on-country-data)) that includes 167 unique observations, which means not every country is represented. The descriptions of the variables in this data set are listed in the codebook, which can be found in [`data/data-dictionary.csv`](https://github.com/pstat197/vignette-clustering-methods/blob/main/data/data-dictionary.csv).
+
+In our analysis, we will use `country` to keep track of which countries are classified in which clusters (note that this is not the response variable since it doesn't specify which group each country is in). Since there is no labeled response and all of the other predictors are numeric, then we can compute the distances between observations. Thus, clustering methods would be helpful in analyzing this data set.
+
+**Objective:** We want to categorize countries using socio-economic and health factors that determine the overall development of each country (from the Kaggle description).
+
+We first install the following packages -- just install the ones you do not have yet.
+
+```{r, eval=FALSE}
+# install packages
+install.packages('tidyverse')
+install.packages('factoextra')
+install.packages('cluster')
+install.packages('dendextend')
+install.packages('mclust')
+install.packages('dbscan')
+install.packages('fpc')
+```
+
+We load in the necessary packages and the country data below.
+
+```{r, message=FALSE}
+# load packages
+library(tidyverse)
+library(factoextra)
+library(cluster)
+library(dendextend)
+library(mclust)
+library(dbscan)
+library(fpc)
+
+# read data
+countries <- read.csv("data/country-data.csv")
+
+# use countries as the row names
+df <- countries %>%
+  column_to_rownames(var = "country")
+
+# show the first few rows of the dataframe
+head(df)
+```
+
+# Hierarchical clustering
+
+In hierarchical clustering, we use the Euclidean distance as our similarity measure between each observation. The Euclidean distance is the most common distance measure used when the variables are continuous. This value is a non-negative measure that calculates the distance between two points and is based upon the Pythagorean Theorem. Here, we also scale/standardize our data (i.e. subtract each observation by the mean of its column and divide it by the standard deviation of its column) to ensure that the effect one variable isn't completely influencing the clusters. This is done before we look at the optimal number of clusters.
+
+<details>
+
+<summary>**When do we need to scale our data?**</summary>
+
+It depends on your data. If the data is already on the same scale or it doesn't make sense to scale the data (e.g. latitude and longitude), then scaling isn't necessary. If the data has different ranges for some variables (e.g. in our data set, `health` and `income` are measured in different units and thus have different ranges), consider scaling it. It never hurts to compared the scaled and unscaled data -- we show an example of this in the [model-based clustering section](#model-based-clustering).
+
+</details>
+
+<br>
+
+At the beginning of hierarchical clustering, all objects start as an individual cluster and are joined with a linkage method. Based on this chosen metric, two objects are linked together to form a cluster. This linkage process is repeated, forming bigger clusters until there is only one cluster left. There are many linkage methods one can use such as `Single Linkage`, `Complete Linkage`, `Centroid Linkage`, `Average Linkage`, and `Ward's Linkage`, among others. One of the most common is Single Linkage, which finds the two clusters with the closest minimum distance. Single Linkage can result in extended, trailing clusters in which single observations are fused together, one at a time. This repeats until there is a single cluster left. The linkage method we will use is **Complete Linkage**, which is also commonly used. It finds the two clusters with the closest maximum distance and merges them together. In this case, it records the largest of the dissimilarity values. This process is repeated until there is a single cluster left.
+
+## Optimal number of clusters {.tabset}
+
+Determining the optimal number of clusters is subjective and heavily depends on which method is used for measuring the similarities of the observations. We use a variety of methods by implementing the `fviz_nbclust()` function from the `factoextra` package. These include the elbow method, average silhouette method, and gap statistic method (see [this article](https://towardsdatascience.com/how-many-clusters-6b3f220f0ef5) for a more comprehensive understanding of these methods).
+
+### Elbow method
+
+-   For each cluster, the WSS (within-cluster sum of squares) is the sum of the squared distances between each observation in the cluster and the center of the cluster
+-   Adding the WSS across all clusters gets us the total WSS
+-   The total WSS keeps decreasing as the number of clusters gets larger
+-   The optimal number of clusters is the point where the line in the plot appears to bend (i.e. where the total WSS doesn't seem to decrease as much)
+-   **Lower total WSS = better**
+
+```{r}
+# scale and center the dataframe
+scaled.df <- df %>% scale()
+
+# run elbow method (best = 5 clusters)
+fviz_nbclust(scaled.df,
+             hcut,
+             method = "wss") +
+  # vertical dashed line at the optimal number of clusters
+  geom_vline(xintercept = 5, 
+             linetype = 2)
+```
+
+### Average silhouette method
+
+-   Measures how well an object lies within a cluster
+-   Computes the clustering algorithm for different values of $k$, then calculates the [average silhouette](https://www.datanovia.com/en/lessons/cluster-validation-statistics-must-know-methods/#silhouette-coefficient) of the observations for each $k$
+-   The optimal number of clusters is the point where the maximum location in the plotted curve is achieved
+-   **Higher average silhouette = better**
+
+```{r}
+# run average silhouette method (best = 2 clusters)
+fviz_nbclust(scaled.df, 
+             hcut, 
+             method = "silhouette")
+```
+
+### Gap statistic method
+
+-   Compares the total within intra-cluster variation for different values of $k$ with randomly distributed points (the gap statistic)
+-   Choose $k$ such that the gap statistic is within 1 standard deviation of the gap statistic at $k + 1$
+-   **Higher gap statistic = better**
+
+```{r}
+# calculate gap statistic
+set.seed(123)
+gap_stat <- clusGap(scaled.df,
+                    hcut,
+                    K.max = 10, # max number of clusters to consider
+                    B = 500)    # number of samples to bootstrap
+
+# run gap statistic method (best = 3 clusters)
+fviz_gap_stat(gap_stat)
+```
+
+## Dendrograms {.tabset}
+
+Since we don't need to specify the number of clusters we want beforehand like in K-means clustering, we produce a dendrogram -- an upside down tree-like diagram that represents the observations. In this diagram, we are able to observe the groupings for each possible number of clusters from $k = 1, ..., n$. A dendrogram is seen as an advantage over K-means clustering because we can see how each possible number of clusters affects the data as opposed to specifying the number of clusters at the beginning and having to tune. In practice, one can select an appropriate number of clusters for the data by just analyzing the dendrogram and based on the heights of the fusions and the number of clusters desired.
+
+We use $k = 2, 3, 5$ clusters based on the optimal number of clusters in the previous section. We also include $k = 4$ since it is between $k = 3$ and $k = 5$.
+
+### $k = 2$ clusters
+
+```{r, fig.height=20}
+df %>%
+  scale() %>%                # scale and center the columns
+  dist() %>%                 # get the Euclidean distances between rows             
+  hclust() %>%               # apply hierarchical clustering
+  as.dendrogram() %>%        # turn the cluster output into a dendrogram
+  set("labels_cex", 0.4) %>% # make the font size smaller
+  color_branches(k = 2) %>%  # color the branches based on the 2 clusters
+  color_labels(k = 2) %>%    # color the labels based on the 2 clusters
+  plot(horiz = TRUE)         # make the labels appear on the right
+```
+
+### $k = 3$ clusters
+
+```{r, fig.height=20}
+df %>%
+  scale() %>%                # scale and center the columns
+  dist() %>%                 # get the Euclidean distances between rows  
+  hclust() %>%               # apply hierarchical clustering
+  as.dendrogram() %>%        # turn the cluster output into a dendrogram
+  set("labels_cex", 0.4) %>% # make the font size smaller
+  color_branches(k = 3) %>%  # color the branches based on the 3 clusters
+  color_labels(k = 3) %>%    # color the labels based on the 3 clusters
+  plot(horiz = TRUE)         # make the labels appear on the right
+```
+
+### $k = 4$ clusters
+
+```{r, fig.height=20}
+df %>%
+  scale() %>%                # scale and center the columns
+  dist() %>%                 # get the Euclidean distances between rows  
+  hclust() %>%               # apply hierarchical clustering
+  as.dendrogram() %>%        # turn the cluster output into a dendrogram
+  set("labels_cex", 0.4) %>% # make the font size smaller
+  color_branches(k = 4) %>%  # color the branches based on the 4 clusters
+  color_labels(k = 4) %>%    # color the labels based on the 4 clusters
+  plot(horiz = TRUE)         # make the labels appear on the right
+```
+
+### $k = 5$ clusters
+
+```{r, fig.height=20}
+df %>%
+  scale() %>%                # scale and center the columns
+  dist() %>%                 # get the Euclidean distances between rows  
+  hclust() %>%               # apply hierarchical clustering
+  as.dendrogram() %>%        # turn the cluster output into a dendrogram
+  set("labels_cex", 0.4) %>% # make the font size smaller
+  color_branches(k = 5) %>%  # color the branches based on the 5 clusters
+  color_labels(k = 5) %>%    # color the labels based on the 5 clusters
+  plot(horiz = TRUE)         # make the labels appear on the right
+```
+
+## {.unlisted .unnumbered}
+
+Between the dendrograms, there are some small changes that may not be noticeable at first glance.
+
+- From 2 to 3 clusters, the method creates a separate cluster for Singapore, Malta, and Luxembourg (which are considered "rich" countries).
+- From 3 to 4 clusters, the method makes Nigeria its own cluster.
+- From 4 to 5 clusters, the method creates a bigger cluster containing countries like Japan, Australia, and the United States.
+
+## Mapping the clusters {.tabset}
+
+The dendrograms can be difficult to read since there are a lot of countries -- `r length(row.names(df))` in total! Luckily, since we are working with countries, we can also plot the clusters onto a world map. Below are some of the functions that we'll use to make our maps.
+
+```{r}
+# perform hierarchical clustering and get k clusters
+k_hclust <- function(.df, k) {
+  .df %>%
+    scale() %>%  # scale and center the columns
+    dist() %>%   # get the Euclidean distances between rows
+    hclust() %>% # apply hierarchical clustering
+    cutree(k)    # separate observations into k clusters
+}
+
+# turn the cluster output into a dataframe
+clust_to_df <- function(.clust) {
+  .clust %>%                              # must be a named vector: clusters as values, countries as names
+    cbind() %>%                           # combine countries and clusters by column
+    data.frame() %>%                      # convert to data frame
+    rename(cluster = 1) %>%               # rename the first column as 'cluster'
+    mutate(cluster = factor(cluster)) %>% # convert the 'cluster' column into a factor
+    rownames_to_column("country")         # turn the row names (countries) into a column called 'country'
+}
+
+# rename countries to be able to plot them
+rename_countries <- function(.df) {
+  .df %>%
+    # replace original country names with new country names (important for the plot_map() function!)
+    mutate(across('country', str_replace, 'Antigua and Barbuda', 'Antigua'),
+           across('country', str_replace, 'Congo, Dem. Rep.', 'Democratic Republic of the Congo'),
+           across('country', str_replace, 'Congo, Rep.', 'Republic of Congo'),
+           across('country', str_replace, 'Cote d\'Ivoire', 'Ivory Coast'),
+           across('country', str_replace, 'Kyrgyz Republic', 'Kyrgyzstan'),
+           across('country', str_replace, 'Lao', 'Laos'),
+           across('country', str_replace, 'Macedonia, FYR', 'North Macedonia'),
+           across('country', str_replace, 'Micronesia, Fed. Sts.', 'Micronesia'),
+           across('country', str_replace, 'Slovak Republic', 'Slovakia'),
+           across('country', str_replace, 'St. Vincent and the Grenadines', 'Saint Vincent'),
+           across('country', str_replace, 'United Kingdom', 'UK'),
+           across('country', str_replace, 'United States', 'USA')) %>%
+    # add separate rows for countries that were originally grouped together
+    add_row(country = 'Barbuda', cluster = filter(., country == 'Antigua') %>% getElement('cluster')) %>%
+    add_row(country = 'Grenadines', cluster = filter(., country == 'Saint Vincent') %>% getElement('cluster'))
+}
+
+# plots the clusters onto the world map
+plot_map <- function(.df) {
+  # dataframe containing information (e.g. latitude, longitude) on all countries
+  world <- map_data("world")
+  
+  world %>%
+    # (left) join 'world' dataframe with another dataframe at columns with the country names
+    left_join(.df, by = c("region" = "country")) %>%
+    # plot the map
+    ggplot() +
+      geom_polygon(aes(x = long, y = lat, fill = cluster, group = group),
+                   color = "white") +
+      coord_fixed(1.3) +
+      theme(legend.position = "top")
+}
+```
+
+If you're curious, this is how we determined what names to change.
+
+```{r}
+# dataframe containing information (e.g. latitude, longitude) on all countries
+world <- map_data("world")
+
+# get unique countries in 'df' and 'world'
+unique_countries_df <- row.names(df) %>% unique() %>% sort()
+unique_countries_world <- world$region %>% unique() %>% sort()
+
+# get all countries that occur in 'df' but not in 'world'
+setdiff(unique_countries_df, unique_countries_world)
+```
+
+Use the tabs to choose between different numbers of clusters obtained from hierarchical clustering. Note that some countries are not included in this data set (shaded in gray), such as Mexico and Greenland.
+
+### $k = 2$ clusters
+
+```{r, out.width='150%'}
+# plot 2 clusters onto the world map
+df %>%
+  k_hclust(2) %>%
+  clust_to_df() %>%
+  rename_countries() %>%
+  plot_map()
+```
+
+### $k = 3$ clusters
+
+```{r, out.width='150%'}
+# plot 3 clusters onto the world map
+df %>%
+  k_hclust(3) %>%
+  clust_to_df() %>%
+  rename_countries() %>%
+  plot_map()
+```
+
+### $k = 4$ clusters
+
+```{r, out.width='150%'}
+# plot 4 clusters onto the world map
+df %>%
+  k_hclust(4) %>%
+  clust_to_df() %>%
+  rename_countries() %>%
+  plot_map()
+```
+
+### $k = 5$ clusters
+
+```{r, out.width='150%'}
+# plot 5 clusters onto the world map
+df %>%
+  k_hclust(5) %>%
+  clust_to_df() %>%
+  rename_countries() %>%
+  plot_map()
+```
+
+# Model-based clustering
+
+Clusters are not necessarily strict boundaries -- for example, if a point is further away from the center of a cluster, then it may be less likely to be in that cluster. To account for this uncertainty, one assumption we can make is that the clusters follow a (multivariate) normal distribution, which is a probability density function. (More formally, this method is called Gaussian mixture models clustering.) An example of this with two variables is shown below.
+
+<br>
+
+<center>[![](img/mb-cluster-gaussian.png){width="357"}](https://youtu.be/h7RVeO-P3zc)</center>
+
+</br>
+
+To define such a distribution for a given set of observations, we need to find its covariance matrix. We won't get into the mathematical details here (see [this paper](https://stat.uw.edu/sites/default/files/files/reports/2012/tr597.pdf) for a more rigorous treatment), but the basic idea is that by modifying this matrix, we can create different types of clusters that are determined by three aspects:
+
+-   **Volume:** the amount of space that each cluster contains
+    -   *Equal:* all clusters have the same volume
+    -   *Variable:* the clusters can have different volumes
+-   **Shape:** the width of the clusters
+    -   *Equal:* all clusters have the same shape (e.g. all spherical, all elliptical)
+    -   *Variable:* the clusters can have different shapes
+-   **Orientation:** how the clusters are positioned in space and what direction it is facing
+    -   *NA:* used for spherical clusters (since rotating these clusters doesn't change the groups)
+    -   *Axes:* all clusters are parallel to the axis/axes
+    -   *Equal:* all clusters have the same orientation
+    -   *Variable:* the clusters can have different orientations
+
+Below is a table containing all of the possible types of clusters. The identifiers are made up of three letters, which indicate what volume, shape, and orientation the clusters have, respectively. These are labeled as follows:
+
+-   *E* = "equal"
+-   *V* = "variable"
+-   *I* = "coordinate axes"
+
+<br>
+
+<center>[![](img/mb-cluster-models-table.png){width="453"}](https://youtu.be/h7RVeO-P3zc)</center>
+
+</br>
+
+Here are some visuals to accompany the table above.
+
+<br>
+
+<center>[![](img/mb-cluster-models-visual.jpeg){width="570"}](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5096736/)</center>
+
+</br>
+
+To identify both the optimal model and number of clusters, the Bayesian Information Criterion (BIC) is used since it penalizes models with more parameters, i.e. the "general" clusters are penalized more since they have more variability (and therefore more parameters). Many combinations of different models and numbers and clusters are fit, and the combination that yields the maximum BIC is chosen as the "best" one.
+
+<details>
+
+<summary>**Why do we maximize the BIC? Aren't we supposed to minimize it?**</summary>
+
+Good question! Just to give some context, the BIC allows us to compare models with different numbers of parameters. From [this article](https://towardsdatascience.com/an-intuitive-explanation-of-the-bayesian-information-criterion-71a7a3d3a5c5), we want to minimize the BIC, which is defined as $$\text{BIC} = k \ln{(n)} - 2 \ln{(\hat{L})}$$ where
+
+-   $k$ is the number of model parameters,
+-   $n$ is the number of data points, and
+-   $L$ is the maximum likelihood function (i.e. how likely our data explained by a given model).
+
+Having more parameters tends to produce more flexible models that fit the model better and thus yield a higher likelihood (i.e. higher $\hat{L}$). This means the second term $-2 \ln{(\hat{L})}$ would become more negative, which decreases the BIC.
+
+However, we usually want to explain the data by using as few parameters as possible -- this is called the principle of parsimony. Having too many parameters can also risk overfitting the data, which may not generalize well to new data. As a result, we penalize models with more parameters. In math terms, we have a larger $k$, which makes the first term $k \ln{(n)}$ bigger, which in turn increases the BIC.
+
+Then why do we maximize the BIC here? It turns out that in [the paper (p. 54)](https://stat.uw.edu/sites/default/files/files/reports/2012/tr597.pdf) associated with the `mclust` package (which we use to run this algorithm), the BIC is roughly defined as $$\text{BIC} = 2 \ln{(\hat{L})} - k \ln{(n)}$$
+
+This is essentially taking the negative of our BIC equation from earlier, hence why the algorithm tries to maximize the BIC rather than minimizing it.
+
+</details>
+
+## Choosing the best model {.tabset}
+
+### Run the algorithm
+
+We'll start by using our *unscaled* data to illustrate how scaling can affect our clusters. We'll use the the `Mclust()` function in the `mclust` package to run this algorithm. The code below may take a minute or two since it is fitting all of the possible models using different numbers of clusters. The output includes the optimal model and number of clusters, along with how many observations are in each cluster.
+
+```{r}
+# run model-based clustering algorithm
+mb <- Mclust(df)
+
+# output model and number of clusters chosen
+summary(mb)
+```
+
+### BIC plot
+
+How did the algorithm choose the model? We can compare all of the models at different numbers of clusters. Higher BIC suggests a better model. (Spot the model that we got from running the algorithm!)
+
+```{r}
+# create BIC plot
+plot(mb, what = "BIC")
+```
+
+### Classification plots
+
+We can see how the points are classified for each pair of variables in the data set using the chosen model and number of clusters. Different colored symbols represent different clusters.
+
+```{r}
+# create classification plots
+plot(mb, what = "classification")
+```
+
+We can zoom in on a plot by specifying the row and column number in the `dimens` argument.
+
+```{r}
+# classification plot of life_expec against health
+plot(mb, what = "classification", dimens = c(3, 7))
+```
+
+### Uncertainty plots
+
+We can account for the uncertainty of the classifications -- remember that if an observation is far from the center of its cluster, then it is less likely to be in that cluster. Bigger and darker circles represent more uncertainty for an observation.
+
+```{r}
+# create uncertainty plots
+plot(mb, what = "uncertainty")
+```
+
+Because there are so many plots, it is difficult to see where the uncertainty for each pair of variables generally lies. Again, we can use the `dimens` argument to zoom in on a plot.
+
+```{r}
+# uncertainty plot of life_expec against health
+plot(mb, what = "uncertainty", dimens = c(3, 7))
+```
+
+### Density plots
+
+To see the regions where more of the points are closer together, we can plot the estimated density. The code below creates a contour plot for each pair of variables in the data set. The smaller inner circles represent the denser regions.
+
+```{r}
+# create density plots
+plot(mb, what = "density")
+```
+
+Let's zoom in on a plot again.
+
+```{r}
+# density plot of life_expec against health
+plot(mb, what = "density", dimens = c(3, 7))
+```
+
+## Mapping the clusters
+
+Like before, we plot our clusters onto the world map (remember the data was not scaled). Notice that we have more clusters here than when we used hierachical clustering.
+
+```{r, out.width='150%'}
+# plot clusters onto the world map
+mb$classification %>%
+  clust_to_df() %>%
+  rename_countries() %>%
+  plot_map()
+```
+
+## Scaling the data
+
+Let's repeat the same process as earlier, but now we scale our data beforehand. Notice how we have less clusters than before -- this implies that scaling may have made some countries closer to each other (distance-wise). 
+
+```{r, out.width='150%'}
+# run the algorithm
+mb2 <- Mclust(scaled.df)
+
+# plot clusters onto the world map
+mb2$classification %>%
+  clust_to_df() %>%
+  rename_countries() %>%
+  plot_map()
+```
+
+# Density-based clustering
+
+Unlike the other two algorithms that is mainly derived from how the computer calculates the clusters, the basic idea behind the [density-based clustering approach](https://developers.google.com/machine-learning/clustering/clustering-algorithms) is derived from a clustering method that is intuitive to humans. The results of clustering calculated from a density-based method would be similar to how people classify the clusters through graphs only based on their eyes. For example, looking at the figure below, it is easy for us to identify the different clusters only based on our eyes because of the various dense regions of points on the graph.
+
+<center>[![](img/dbscan-idea.png){width="590"}](https://www.datanovia.com/en/lessons/dbscan-density-based-clustering-essentials/)</center>
+
+## DBSCAN algorithm
+
+[DBSCAN](https://www.geeksforgeeks.org/dbscan-clustering-in-r-programming/), or "Density-Based Spatial Clustering of Applications with Noise", is a commonly used density-based clustering approach. The idea that it uses are density reachability and connectivity. The data is divided into clusters with similar characteristics, where a cluster is defined as a maximum set of densely connected points. It discovers clusters of arbitrary shapes in spatial databases with noise.
+
+## Important concepts
+
+<center>[![](img/dbscan-concept.png){width="620"}](https://towardsdatascience.com/explaining-dbscan-clustering-18eaf5c83b31)</center>
+
+Two required parameters in the DBSCAN algorithm are:
+
+-   [*eps*](https://towardsdatascience.com/explaining-dbscan-clustering-18eaf5c83b31): Eps stands for "Epsilon", which stands for the maximum radius of the neighborhood or the clusters, and is shown as the blue line in the above figure. The data points will be included in the clusters if their mutual distance is less than or equal to the value of epsilon. For the DBSCAN algorithm, larger eps will create broader clusters, which contains more data points; smaller eps will narrow clusters, which contains less data points. However, if the chosen eps is too small for the data set, a large part of the data points would be considered as the noise points and will not be included in the clusters; if the chosen eps is too large for the data set, clusters will be merged and the majority of the data points will be included in the same cluster.
+
+-   [*MinPts*](http://www.sefidian.com/2020/12/18/how-to-determine-epsilon-and-minpts-parameters-of-dbscan-clustering/): MinPts stands for "the minimum number of data points contained within the radius of a neighborhood" to be considered as a cluster, which is the value of 4 in the above figure. In the DBSCAN algorithm, the value MinPts should be at least 3 to be used as a valid value. If a smaller value of MinPts is used, more clusters and more outliers will be produced; if a larger value of MinPts is used, more robust clusters will be created.
+
+By changing the two hyperparameters above, the result of clustering may be varied.
+
+Other important terms to understand how DBSCAN works are:
+
+-   [*Core points*](https://www.dominodatalab.com/blog/topology-and-density-based-clustering): A point is a core point if it has more than MinPts points within eps, which is randomly selected in the algorithm and is the foundation of the clusters. These are the green points shown in the above figure.
+
+-   [*Border points*](https://www.dominodatalab.com/blog/topology-and-density-based-clustering): A point that is included in the neighborhoods or the clusters but is not a core point, which are the red points shown in the above figure.
+
+-   [*Noise points / Outliers*](https://www.geeksforgeeks.org/dbscan-clustering-in-ml-density-based-clustering/): The points that are neither core points nor are they close enough to a cluster to be defined as border points. Noise points are not assigned to any clusters and sometimes may be considered as anomalous points in the data set, which are the grey points shown in the above figure.
+
+## Determining the best hyperparameters
+
+### Determining eps: Elbow Method
+
+In the DBSCAN algorithm, the best eps value is commonly found with a [k-distance graph](https://towardsdatascience.com/explaining-dbscan-clustering-18eaf5c83b31), where the value of $k$ should equal to the value of MinPts. For this graph, the $x$-axis contains all data points in the data set and the $y$-axis stands for the average distances of the data points. The best eps may chosen by looking at the elbow of the $k$-distance line. For example, after scaling our data, it plots a k-distance graph with a value of $k = 5$ below. From this plot, if we choose MinPts equal to 5, the value of eps should be between 2 to 4.
+
+```{r}
+kNNdistplot(scaled.df, k = 5) # plot k-distance graph
+abline(h = 2.5, col = "red")  # best value of eps
+```
+
+### Determining MinPts
+
+-   [Approach 1](http://www.sefidian.com/2020/12/18/how-to-determine-epsilon-and-minpts-parameters-of-dbscan-clustering/): As a rule of thumb, the best value of MinPts can be determined by the value of the number of dimensions $D$ in the data set, which means that ${MinPts}\geq\text{D} + 1$. And in general, the value of MinPts should be ${MinPts} = \text{D} * 2$. For our data set, the dimensionality is 9 so the best MinPts should be 18 with this approach.
+
+-   [Approach 2](https://stackoverflow.com/questions/12893492/choosing-eps-and-minpts-for-dbscan-r): In most cases where we do not have domain knowledge, we can also find the best value of MinPts by $\ln{(n)}$, where $n$ is the number of points that needed to be clustered. For our data set, $n$ should be 167 and the MinPts should be 5 or 6 with this approach.
+
+## Tuning the hyperparameters {.tabset}
+
+### eps = 3, MinPts = 18
+
+```{r}
+# create cluster with maximum radius of 3 for the neighborhood 
+# with at least 18 points include in each cluster
+set.seed(1)
+db <- fpc::dbscan(scaled.df, eps = 3, MinPts = 18)
+
+# visualize the clustering results
+fviz_cluster(db, data = scaled.df, stand = FALSE,
+             ellipse = FALSE, show.clust.cent = FALSE,
+             geom = "point", palette = "jco", ggtheme = theme_classic())
+```
+
+*For this plot, we select the value of MinPts based on the first approach, which produces only one cluster.*
+
+### eps = 3, MinPts = 5
+
+```{r, warning = FALSE}
+# create cluster with maximum radius of 3 for the neighborhood 
+# with at least 5 points include in each cluster
+set.seed(1)
+db1 <- fpc::dbscan(scaled.df, eps = 3, MinPts = 5)
+
+# visualize the clustering results
+fviz_cluster(db1, data = scaled.df, stand = FALSE,
+             ellipse = FALSE, show.clust.cent = FALSE,
+             geom = "point", palette = "jco", ggtheme = theme_classic())
+```
+
+*For this plot, we select the value of MinPts based on the second approach, which produces only one cluster.*
+
+### eps = 6, MinPts = 5
+
+```{r}
+# create cluster with maximum radius of 6 for the neighborhood 
+# with at least 5 points include in each cluster
+set.seed(1)
+db <- fpc::dbscan(scaled.df, eps = 6, MinPts = 5)
+
+# visualize the clustering result
+fviz_cluster(db, data = scaled.df, stand = FALSE,
+             ellipse = FALSE, show.clust.cent = FALSE,
+             geom = "point", palette = "jco", ggtheme = theme_classic())
+```
+
+*For this plot, as eps becomes larger, more noise points are also included in the cluster.*
+
+### eps = 1, MinPts = 5
+
+```{r}
+# create cluster with maximum radius of 1 for the neighborhood 
+# with at least 5 points include in each cluster
+set.seed(1)
+db <- fpc::dbscan(scaled.df, eps = 1, MinPts = 5)
+
+# visualize the clustering result
+fviz_cluster(db, data = scaled.df, stand = FALSE,
+             ellipse = FALSE, show.clust.cent = FALSE,
+             geom = "point", palette = "jco", ggtheme = theme_classic())
+```
+
+*For this plot, as eps becomes smaller, more clusters exist. However, most of the data points are also excluded from those clusters and become noise points.*
+
+## {.unlisted .unnumbered}
+
+After comparing the results of different combinations of eps and MinPts, we decide to use the one with eps = 3 and MinPts = 5 as our final parameter combination.
+
+## Checking PCA
+
+Since we only got one cluster for this algorithm, we can further use PCA (principal component analysis) to check if this cluster pattern is correct or not.
+
+```{r}
+# perform PCA on scaled data
+pr.out <- prcomp(scaled.df,
+                 scale = TRUE,
+                 center = TRUE)
+
+# plot the first 2 principal components
+plot(pr.out$x[,1], pr.out$x[,2],
+     xlab = 'PC1', ylab = 'PC2')
+```
+
+After checking the [PCA plot](https://stackoverflow.com/a/63207694), it is easy to see that the PCA plot shows a dense single group on the graph, which may be the reason why we only got one single cluster in DBSCAN.
+
+## Mapping the clusters
+
+We plot the clusters obtained from the DBSCAN algorithm onto the world map.
+
+```{r, out.width='150%'}
+# add country names to clusters
+db_clust <- db1$cluster
+names(db_clust) <- row.names(df)
+
+# plot clusters onto the world map
+db_clust %>%
+  clust_to_df() %>%
+  rename_countries() %>%
+  plot_map()
+```
+
+# Results and analysis
+
+## Hierarchical clustering
+
+Firstly, let us look at the map clusters for hierarchical clustering. According to the results with 2, 3, 4, and 5 clusters, we observe that there is no significant change when we add up the number of clusters each time from 2 to 4. Since the number of clusters are given by the optimization methods above, we see that 2, 3, or 5 clusters will give us the best clustering results, so we will not continue adding up the number of clusters over 5. Therefore, we might decide that $k = 2$ and $k = 5$ are the optimal numbers of clusters we want to analyze in hierarchical clustering.
+
+### 2 clusters
+
+Focusing on the map clusters when $k = 2$, we could easily find that the result mainly splits the map into two regions: a large part of African and Middle East countries with some countries in South Asia (red region), and the rest of the world (blue region). Here are some examples of the countries in red region: Niger, Chad, South Africa, Nigeria, Iraq, Liberia, Afghan, etc., and some examples of the countries in blue region: Canada, the United States, Australia, India, and so on. According to the data set and the information searched online, we find that the countries in the red region has the same properties: very high `child_mort`, low `income`, low `gdpp`, very high `total_fer`, relatively low `life_expec`, and so on. Compared to those countries in red region, we observe an obvious difference from those properties of the countries in the blue region: generally speaking, countries in the blue region have relatively better socio-economic and health conditions. It is worth mentioning that, we find that `total_fer` is an especially important indicator affecting the clustering results in this case. We observe that some countries in the blue region also have relatively weak socio-economic conditions, like India (`income` = 4410, `child_mort` = 58.8, `gdpp` = 1350). However, those countries with weak socio-economic conditions in the blue region always have relatively low `total_fer`, compared to pretty high average level of `total_fer` of the countries in red region.
+
+In this case, we could infer that hierarchical clustering performs well in dividing the countries into two types: Stage 1 countries (red region), and Stage 2-5 countries (blue region). The classification method here is known as the [Demographic Transition Model](https://www.intelligenteconomist.com/demographic-transition-model/), which is widely accepted in the social sciences because of the well-established historical correlation linking dropping fertility to social and economic development. Stage 1 countries generally characterized by pre-industrial societies in which both birth and death rates are quite high. Birth rates and death rates are effectively in balance. The lack of food availability as well as inadequate medical care or effective sanitation and hygiene means the population does not grow very much due to disease and starvation. Therefore, we conclude that hierarchical clustering performs well in stably categorizing countries into two levels with pretty good interpretation.
+
+### 5 clusters
+
+According to the property of the hierarchical clustering, adding up the number of clusters each time will not divide one region into two, keeping the rest of the region unchanged. Therefore, compared to the previous trails, the hierarchical clustering results in a significant separation, which mainly divides the blue region in hierarchical clustering $k = 2$ into two regions: the green region and the yellow region, keeping the Stage 1 countries (red region) almost unchanged. (Since the change in clustering $k = 3$ and $k = 4$ is not significant, we will not focus on analyzing those parts.) In the yellow region, it includes many countries in Asia, South America, Middle East, and East Europe: for example, Brazil, China, Russia, Poland, Thai, Libya, etc. The common properties of those countries are middle `income`, middle `gdpp`, middle to low `child_mort`, middle to low `total_fer`, and so on. In the green region, it includes the U.S., Australia, Canada, and the countries mainly in North Europe, such as Norway, Iceland, Switzerland, the U.K., etc. Compared to the countries in the yellow region, those green region countries have much better socio-economic and health conditions. Overall speaking, applying hierarchical clustering with $k = 5$ performs well in categorizing countries into several main regions with obvious socio-economic and health levels. However, we cannot ignore the purple region and the blue region, which are two clusters that only contain very few countries. When we are trying to combine those two clusters with the three clusters we talked about above, we find that it is hard to interpret all the clusters together with a clear trend of change of socio-economic and health levels. Thus, we might still prefer the hierarchical clustering with $k = 2$.
+
+## Model-based clustering
+
+### Unscaled
+
+Now we look at the model-based clustering with the best model of $k = 6$ on the unscaled data set. We could easily observe that model-based clustering performs much better than hierarchical clustering in categorizing countries into more levels when we are adding up the number of clusters, since several regions are distinctly divided on the map. The result mainly splits the map into six regions. In the red region, it includes the countries mainly in southern Africa (South Africa, Dem. Rep. of Congo, Zambia, etc.), South Asia (India, Pakistan,etc.), and middle East (Yemen, Iraq, etc.). The properties of those countries include pretty high `child_mort`, low `income`, low `gdpp`, high `total_fer`, relatively low `life_expec`, and so on. In the pink region, it includes the countries mainly in Middle and Western Africa (Niger, Chad, Liberia, etc.), and South Asia (Afghan, Nepal, etc.). The boundary between the red and pink regions is not that clear, but generally we can observe that the socio-economic and health conditions of the pink region are even worse than those of the red region. Furthermore, the average `total_fer` of the countries in the pink region is even higher than the red region.
+
+In the green region, it includes a large part of Asia (China, Thai, etc.), some countries in Europe (Russia, Belarus, Ukraine, etc.), some countries in North Africa (Algeria, etc.), and some countries in South America (Peru, Chile, Argentina, etc.). The properties of those countries include middle `child_mort`, middle `income` compared to the red and pink regions, middle `gdpp`, low `total_fer`, relatively higher `life_expec`, and so on. In the yellow region, it includes Brazil in South America, and some countries in Europe (Turkey, Poland, Romania, etc.). Compared to the green region, the countries in the yellow region on average have higher `income`, higher `gdpp`, higher `health`, and lower `total_fer`, with other conditions kept unchanged. Thus, we infer that the countries in the yellow region have slightly better socio-economic and health conditions than the green region.
+
+In the blue region, it mainly includes the United States, some countries in the middle East (Saudi Arabia, Libya etc.), and also one country in Africa (Nigeria). Here we find something interesting; intuitively, we will regard the blue region as a category of better socio-economic and health conditions than all the categories we talked about above, since the blue region includes the U.S., Saudi Arabia, and some countries which have pretty high `income` and `gdpp`. However, although the average level of socio-economic and health conditions in the blue region is really good, the model-based clustering still puts some countries like Nigeria in this category. When we look into the details information of Nigeria, we find that it has extremely high `child_mort`, low `income`, low `gdpp`, and high `total_fer`, which should be the properties of the red or pink regions. In this case, it is hard to interpret the properties of the blue region for some reason. Finally, in the turquoise region, it includes a lot of countries in Europe (the U.K., France, Ireland, Norway, etc.), Canada, and Australia. Compared to all the regions above, the countries in the turquoise region have the best socio-economic and health conditions.
+
+### Scaled
+
+Now, we continue to look at the model-based clustering with the best model of $k = 3$ on the scaled data set. We can easily observe that model-based clustering also perform much better than hierarchical clustering in categorizing countries into more levels when we are adding up the number of clusters on the scaled data set. The result mainly splits the map into three regions. In the red region, it includes the countries mainly in southern Africa (Angola, Dem. Rep. of Congo, Zambia, etc.), South Asia (India, Pakistan,etc.), and middle East (Niger, Chad, Nigeria etc.). The properties of those countries include pretty high `child_mort`, low `income`, low `gdpp`, high `total_fer`, relatively low `life_expec`, low `health` and so on. In the green region, it includes the countries mainly in Asia (China, Thai, etc.), some countries in Europe (Russia, Poland, Ukraine, etc.), some countries in Africa (Algeria, South Africa, etc.), and many countries in South America (Peru, Chile, Argentina, Brazil, etc.). The properties of those countries include middle to low `child_mort`, middle `income`, middle `gdpp`, middle to low `total_fer`, middle to high `life_expec` and so on. Thus, the countries in green region have better socio-economic and health conditions than the countries in the red region. In the turquoise region, it includes a lot of countries in Europe (the U.K., France, Ireland, Norway, etc.), Canada, Australia, and the U.S. Compared to all the regions above, the countries in the turquoise region have the best socio-economic and health conditions.
+
+## Density-based clustering
+
+When we are looking at the map cluster results for density-based clustering, we observe that there are only two clusters: one only contains Nigeria, while the other one includes all the rest of the countries. According to the detailed information on the socio-economic and health conditions of all the countries, it does not make sense to separate Nigeria individually, and it is also meaningless to categorize all the countries into one cluster. Therefore, density-based clustering method does not perform well on this data set.
+
+## Comparison and summary
+
+In summary, model-based clustering has a good overall performance in categorizing the countries into more detailed levels since each region in the model-based clustering output is relatively interpretative, and we can see a clear trend of the varying socio-economic and health conditions among those regions. The clustering results from this method are more useful when we aim to categorize and compare the different countries with more detailed information. However, the trade-off is that it largely decreases the interpretability of the results. Since the model can never be perfect, it is more likely to lead to some categorizing problems that make the clusters difficult to interpret. Just like the examples we talked about above, intuitively it does not makes sense to put Nigeria into the blue region when applying model-based clustering on the unscaled data set, so it is hard for us to summarize the common properties of the countries in this cluster. Compared to the model-based clustering on the unscaled data set, the clustering on the scaled data set increases the interpretability with smaller number of clusters. Finally, comparing the hierarchical clustering and model-based clustering together, we find that both methods perform well in different ways, and there are some trade-offs between the number of clusters and the interpretability of those clusters. The results of hierarchical clustering are the easiest to interpret, but we could not apply this method to achieve a more complex categorization for this data set. On the contrary, the results of model-based clustering on the unscaled data set are the most difficult to interpret, but we could get more information about different categories on this data set. The results of model-based clustering on the scaled data set balance that trade-off. Just as what we mentioned at the beginning, there is no criterion for "good" clustering, so we generally just want to choose the method that balances this trade-off and achieves our research goal.
+
+```{r, include=FALSE}
+# put just code in our R script
+knitr::purl(input = 'vignette.Rmd', 
+            output = 'scripts/vignette-script.R')
+```
