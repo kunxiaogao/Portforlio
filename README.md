@@ -66,7 +66,7 @@ This file includes all the works of the Capstone project assignment in group 8: 
 
 ### Methodology:
 
--   Optimization methods: Elbow method, Average Silhouette method, Gap Statistic method; Clustering methods used to train the models: Hierarchical clustering, Model-based clustering (including the algorithm to choose the best model), Density-based clustering; Dimension reduction techniques (`PCA`) for reducing dimension; Visualization techniques to visualize results: Dendrograms and Maps.
+-   Optimization methods: `Elbow method`, `Average Silhouette method`, `Gap Statistic method`; Clustering methods used to train the models: `Hierarchical clustering`, `Model-based clustering` (including the algorithm to choose the best model), `Density-based clustering`; Dimension reduction techniques (`PCA`) for reducing dimension; Visualization techniques to visualize results: `Dendrograms` and `Maps`. 
 
 `data` contains all the raw data and processed data used in analysis. 
 
@@ -75,6 +75,21 @@ This file includes all the works of the Capstone project assignment in group 8: 
 `image` contain the images sources used in the report.
 
 The final outcomes: `Vignette.Rmd` `Vignette.html`.
+
+All the details are included in the project file.
+
+## Machine Learning Final Project
+This file includes all the works of the Final project assignment in PSTAT131 Machine learning. 
+
+### Brief background introduction: 
+-   As the midterm elections in the United States is currently being held near the midpoint of the current president’s four-year term of office, it is a good time for us to review the 2020 United States presidential election data. Despite that the 2016 presidential election came as a big surprise to many, Biden’s victory in the 2020 presidential election has been widely predicted.
+-   Goal: Analyze and visualize the 2020 presidential election dataset. We will primarily work towards building state/county-level red/blue map plots that are commonly shown on media coverage. In other words, we will combine the Untied States county-level census data with the election data and our target would then be building and selecting classification models to predict the election winner.
+-   Two data sets:  election data in the county level and the 2017 United States county-level census data.
+
+### Methodology:
+-   Optimization methods: `Cross-validation`; Classification methods used to train the models: `Logistic Regression` Method, `Lasso Logistic Regression` Method, `Decision Tree` Method; `Random Forest` Method; `SVM` Method; Dimension reduction techniques (`PCA`) for reducing dimension; Visualization techniques to visualize results: `Dendrograms` and `Maps`; The `classification accuracy metrics` and `ROC graphs` will also be discussed to test the performance of different models.
+
+The final outcomes: `Kunxiao Gao Final Project-HTML.Rmd` and `Kunxiao Gao Final Project-HTML.html`.
 
 All the details are included in the project file.
 
