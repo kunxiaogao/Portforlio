@@ -94,6 +94,11 @@ This file mainly includes some examples and course works for PSTAT115 Bayes Data
 
 All the details about background information and data sets used are included in the files.
 
+## CS9 lab
+This file mainly includes most of the lab works for CS9 Intermediate Python Programming. Each `py` file contain the codes I summarise in each week's material. The main topic of each lab work is labeled as the file name. Intermediate topics in Computer Science using the Python programming language. Topics include object oriented programming, runtime analysis, data structures, and software testing methodologies.
+
+The reason why I uploaded those stuffs is that I think they are very useful learning materials containing lots of good example codes, which I could directly apply in the future. 
+
 
 
 
