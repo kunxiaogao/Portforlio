@@ -3,15 +3,6 @@ Welcome to my workspace! I'm Kunxiao, an undergrad data science student studying
 
 This portfolio is mainly used to collect and back up my main work and study documents, including but not limited to learning materials, lab codes, project outcomes, and so on. All files shown here are allowed to download for any proper use. For any file containing group works or collaborations, the display permits are obtained with the clear citation to each contributor. The briefly description of each file will be summarized below for easier access, but the description will not go into details since the main purpose of this page is to record my learning progress for personal use.
 
-## Capstone lab
-This file mainly includes most of the lab works for PSTAT197A Capstone Project and it is still be to updated. Each `rmd` file contain the codes I summarise in each week's material. The main topic of each lab work is labeled as the file name. 
-
-Untill now, I have already summarised and uploaded the example codes and material about: 
-
--   `usage of tensorflow`, `iteration Strategies`, `logistic model and accuracy table`, `NLP`, `neural networks`, `splines regression`, and `curve fitting`. 
-The files about time series and spatial prediction will be uploaded in the near future. 
-
-The reason why I uploaded those stuffs is that I think they are very useful learning materials containing lots of good example codes, which I could directly apply in the future. 
 
 ## Capstone project biomarkers-group9
 This file includes all the works of the Capstone project assignment in group 9: biomarkers. 
@@ -124,7 +115,7 @@ This file includes all the tools about PPT Auto-Generation used for the internsh
 -   For various reasons, all relevant scripts and results were not stored in the personal device and are nowhere to be found. Thus, only relevant templates and tools can be saved.
 
 ## MCMC
-This file mainly includes some examples and course works for PSTAT115 Bayes Data Analysis and it is still be to updated. The contents are mainly about Implementation about different samplers in MCMC algorithm and some examples of writing codes with Stan. The reason why I uploaded those stuffs is that I think they are very useful learning materials containing lots of good example codes, which I could directly apply in the future. 
+This file mainly includes some examples and course works for PSTAT115 Bayes Data Analysis and it is still to be updated. The contents are mainly about Implementation about different samplers in MCMC algorithm and some examples of writing codes with Stan. The reason why I uploaded those stuffs is that I think they are very useful learning materials containing lots of good example codes, which I could directly apply in the future. 
 
 ### The samplers included:
 -   `Metropolis-Hasting algorithm`:
@@ -132,10 +123,28 @@ This file mainly includes some examples and course works for PSTAT115 Bayes Data
 
 All the details about background information and data sets used are included in the files.
 
-## CS9 lab
-This file mainly includes most of the lab works for CS9 Intermediate Python Programming. Each `py` file contain the codes I summarise in each week's material. The main topic of each lab work is labeled as the file name. Intermediate topics in Computer Science using the Python programming language. Topics include object oriented programming, runtime analysis, data structures, and software testing methodologies.
+## Capstone lab
+This file mainly includes most of the lab works for PSTAT197A Capstone Project and it is still to be updated. Each `rmd` file contain the codes I summarize in each week's material. The main topic of each lab work is labeled as the file name. 
+
+Untill now, I have already summarized and uploaded the example codes and material about: 
+
+-   `usage of tensorflow`, `iteration Strategies`, `logistic model and accuracy table`, `NLP`, `neural networks`, `splines regression`, and `curve fitting`. 
+The files about time series and spatial prediction will be uploaded in the near future. 
 
 The reason why I uploaded those stuffs is that I think they are very useful learning materials containing lots of good example codes, which I could directly apply in the future. 
+
+## Machine Learning Lab
+This file mainly includes most of the lab works for PSTAT131 Machine Learning and it is still to be updated. Each `rmd` file contain the codes I summarize in each week's material. The main topic of each lab work is labeled as the file name. 
+
+Untill now, I have already summarized and uploaded the example codes and material about: 
+
+-   `SVM`, `PCA`, `Clustering`, `Bagging and Random Forest`, `decision trees`, `Ridge and Lasso Regression`, `Corss Validation`, `logistic regression`, and `KNN`.
+
+## CS9 lab
+This file mainly includes most of the lab works for CS9 Intermediate Python Programming. Each `py` file contain the codes I summarize in each week's material. The main topic of each lab work is labeled as the file name. Intermediate topics in Computer Science using the Python programming language. Topics include object oriented programming, runtime analysis, data structures, and software testing methodologies.
+
+## To be Continued
+
 
 
 
