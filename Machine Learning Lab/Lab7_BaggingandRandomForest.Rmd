@@ -1,0 +1,170 @@
+---
+title: "Lab 7: Bagging, Random Forests, and Boosting Trees"
+subtitle: "PSTAT 131/231, Fall 2022"
+header-includes: \usepackage{mathtools}
+output: pdf_document
+urlcolor: blue
+---
+
+### Learning Objectives
+> - Bagged trees and random forest by randomForest()
+> - Variable importance by importance() and varImpPlot()
+> - Boosting by gbm()
+
+------
+In Lab 6 - Decision Trees, we used classification trees to analyze the Carseats data set. In this data, Sales is a continuous variable, and so we begin by recoding it as a binary variable. We use the `ifelse()` function to create a variable, called _High_, which takes on a value of _Yes_ if the Sales variable exceeds the median of Sales, and takes a value _No_ otherwise.
+
+```{r, message=F}
+library(dplyr)
+#install.packages("randomForest")
+library(randomForest)
+#install.packages("gbm")
+library(gbm)
+library(ISLR)
+library(tree)
+```
+
+In this lab we will use the same dataset.
+```{r}
+attach(Carseats)
+Carseats = Carseats %>% 
+    mutate(High=as.factor(ifelse(Sales <= median(Sales), "No", "Yes"))) %>%
+    select(-Sales)
+```
+Note that here we directly drop the `Sales` variable. In total, there are 10 predictor, which is used to predict the response variable `High`.
+
+Identical to what we did in Lab 6, we split the data into training (75% data) and test set (25% data).
+```{r}
+# Sample 75% observations as training data
+set.seed(3)
+train = sample(nrow(Carseats), 0.75*nrow(Carseats)) 
+train.carseats = Carseats[train,]
+
+# The rest as test data
+test.carseats = Carseats[-train,]
+```
+
+## 2. Bagging 
+
+In the following, we apply bagging and random forests to the Carseats data, using the **`randomForest`** package in R and compare the same metric for bagged tree and random forest. Note that the exact results obtained in this section may depend on the version of R and the version of the **`randomForest`** package installed on your computer. Recall that bagging is simply a special case of a random forest with `m = p`. Therefore, the **`randomForest()`** function (again, same function and package names) can be used to perform both random forests and bagging. We build a random forest as follows:
+
+```{r}
+bag.carseats = randomForest(High ~ ., data=train.carseats,
+                            mtry=10, importance=TRUE)
+bag.carseats
+```
+
+The argument `mtry=10` indicates that 10 predictors (which is the total number of predictors) should be considered for each split of the tree - recall that is exactly the bagging, i.e., a special case of random forests when m = p. The argument `importance=TRUE` tells whether independent variable importance in bagged trees should be assessed. 
+
+```{r, fig.height=3.5, fig.width=7, fig.align='center'}
+plot(bag.carseats)
+legend("top", colnames(bag.carseats$err.rate),col=1:4,cex=0.8,fill=1:4)
+```
+
+How well does this bagged model perform on the test set?
+
+```{r}
+yhat.bag = predict(bag.carseats, newdata = test.carseats, type = "response")
+test.bag.err = mean(yhat.bag != test.carseats$High)
+test.bag.err
+```
+
+By default (i.e., with `type = "response"`), **`predict`** function defined for the `randomForest` object yields exact classes (in this case, `Yes` and `No`). To get the predicted probability, we need to specify `type = "prob"` in **`predict`**.
+```{r}
+prob.bag = predict(bag.carseats, newdata = test.carseats, type = "prob")
+head(prob.bag)
+```
+Note that the returned predicted probability has two columns: the probability for `No` and the probability for `Yes`.
+
+The predict function for `randomForest` then classifies the response based on the probability. In this example, if the predicted probability of `Yes` is greater than the probability of `No`, then the predicted class is `Yes`.
+
+```{r}
+all(yhat.bag == ifelse(prob.bag[, 2] > 0.5, "Yes", "No"))
+```
+
+The test set error rate associated with the bagged classification tree is `r round(test.bag.err,4)`, lower than that obtained using an optimally-pruned single tree that we've seen in Lab 6. You may consider this a minor improvement, however there are many cases that the improvement could be as half. We could change the number of bagged trees grown by **`randomForest()`** using the `ntree` argument. For simplicity of output, we set the following code chunk option as `eval=FALSE`.
+
+```{r, eval=F}
+bag.carseats = randomForest(High ~ ., 
+                            data=train.carseats,
+                            mtry=10, ntree=700, importance=TRUE)
+yhat.bag = predict(bag.carseats, newdata = test.carseats)
+
+test.bag.err = mean(yhat.bag != test.carseats$High)
+test.bag.err
+```
+
+## 3. Random Forests
+
+Growing a random forest proceeds in exactly the same way, except that we use a smaller value of the `mtry` argument. By default, **`randomForest()`** uses p/3 variables when building a random forest of regression trees, and $\sqrt p$ variables when building a random forest of classification trees. Here we use `mtry = 3`.
+
+```{r, fig.height=3.5, fig.width=7, fig.align='center'}
+rf.carseats = randomForest(High ~ ., data=train.carseats,
+                           mtry=3, importance=TRUE)
+rf.carseats
+plot(rf.carseats)
+
+yhat.rf = predict(rf.carseats, newdata = test.carseats)
+test.rf.err = mean(yhat.rf != test.carseats$High) 
+test.rf.err
+```
+
+The test set error rate is `r round(test.rf.err, 4)`; this indicates that random forests did not provide an improvement over bagging in this case.
+
+Using the **`importance()`** function, we can view the importance of each **`importance()`** variable.
+
+```{r}
+importance(rf.carseats)
+```
+
+Variable importance plot is also a useful tool and can be plotted using **`varImpPlot()`** function. By default, top 10 variables are selected and plotted based on Model Accuracy and Gini value. We can also get a plot with decreasing order of importance based on Model Accuracy and Gini value.
+
+```{r}
+varImpPlot(rf.carseats, sort=T,
+           main="Variable Importance for rf.carseats", n.var=5)
+```
+
+The results indicate that across all of the trees considered in the random forest, the `price` and `ShelfLoc` are by far the two most important variables in terms of Model Accuracy and Gini index.
+
+## 4. Boosting
+
+Here we use the **`gbm`** package, and within it the **`gbm()`** function, to fit boosted classification trees to the Carseats data set. To use **`gbm()`**, we have to guarantee that the response variable is coded as $\{0, 1\}$ instead of two levels. We run **`gbm()`** with the option `distribution="bernoulli"` since this is a binary classification problem; if it were a regression problem, we would use `distribution="gaussian"`. The argument `n.trees=500` indicates that we want 500 bagged trees, and the option `interaction.depth=2` limits the depth of each tree (which is an equivalent parameter to `d` in lecture note and the textbook). The argument `shrinkage` is the learning rate ($\lambda$) or step-size reduction in every step of the boosting. Its default value is 0.001.
+
+```{r}
+set.seed(1)
+boost.carseats = gbm(ifelse(High=="Yes",1,0)~., data=train.carseats, 
+                     distribution="bernoulli", n.trees=500, interaction.depth=2)
+```
+
+The **`summary()`** function produces a relative influence plot and also outputs the relative influence statistics.
+
+```{r}
+summary(boost.carseats)
+```
+
+We see that `Price` is by far the most important variable. We can also produce partial dependence plots for these variables. These plots illustrate the marginal effect of the selected variables on the response after integrating out the other variables. 
+
+```{r, fig.width=7, fit.height=3, fig.align='center'}
+par(mfrow =c(1,2))
+plot(boost.carseats ,i="Price", type = "response")
+plot(boost.carseats ,i="ShelveLoc", type = "response")
+```
+
+We now use the boosted model to predict `High` on the test set:
+
+```{r}
+# setting type = "response" gives the predicted probability
+yhat.boost = predict(boost.carseats, newdata = test.carseats,
+                     n.trees=500, type = "response")
+# then convert the probability to labels
+yhat.boost = ifelse(yhat.boost > 0.5, 1, 0)
+# compare with the 0,1 coding used in training gbm
+test.boost.err = mean(yhat.boost != ifelse(test.carseats$High=="Yes",1,0))
+test.boost.err
+```
+Note that different from the **`predict`** function for the `randomForest` object, the **`predict`** function defined for the `gbm` object yields the predicted probability instead of the exact classes when `type = "reponse"`. 
+Furthermore, the returned predicted probability is a vector that contains the probability for `Yes`. In order to get exact predicted classes, we convert the predicted probability to classes by comparing the probability with a threshold (0.5 in the code above).
+
+The test error rate obtained is `r round(test.boost.err, 4)`; slightly better than the test error rate for random forests and slightly worse to that for bagging. 
+
+

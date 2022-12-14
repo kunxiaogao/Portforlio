@@ -1,0 +1,291 @@
+---
+title: 'Lab 1-2: Data Preprocessing & Distance and Similarity'
+output: pdf_document 
+subtitle: PSTAT 131/231, Fall 2022
+header-includes: \usepackage{float}
+urlcolor: blue
+---
+
+> ### Learning Objectives
+>
+> - Complete installation of `tidyverse`
+> - First steps using `tidyverse`
+>       - `filter()`
+>       - `select()`
+>       - `chaining()`
+>       - `mutate()`
+>       - `summarise()`
+> - Data prepocessing 
+> - Distances
+>       - Euclidean distance
+>       - Manhattan distance
+> - Similarity
+>       - Correlation
+>       - Spearman rank Correlation
+
+-------------------
+
+
+## 1. Preprocessing in the `tidyverse`
+
+We will use the dataset called `hflights`. This dataset contains all flights departing from Houston airports IAH (George Bush Intercontinental) and HOU (Houston Hobby). 
+The data comes from the Research and Innovation Technology Administration at the Bureau of Transportation statistics: [hflights](http://www.transtats.bts.gov/DatabaseInfo.asp?DB_ID=120&Link=0).
+
+Make sure that you have installed the packages `hflights` and `tidyverse` before using them. (See Lab 1-1 for details on packages installation). The `tidyverse` includes many packages that will be utilized repeatedly in this class including `dplyr`, `tidyr`, `tibble` and `ggplot2`. 
+
+Please note that although basic R commands could also achieve these functionality, they are usually much harder/messier to write. `tidyverse` is usually considered as an `modern` way of using R for data analysis. Using `tidyverse` is not mandatory in homework, but is highly recommended since it will make things a lot easier.
+
+Installing `tidyverse` will take a few minutes.
+```{r pkgs, warning=F, message=F}
+# install.packages("hflights")
+# Installing tidyverse may take a couple minutes
+# install.packages("tidyverse")
+
+# Load packages
+library(hflights)
+library(tidyverse)
+
+# Explore data
+data(hflights)
+flights = as_tibble(hflights) # convert to a tibble and print
+flights
+
+```
+
+Note that by default tibble only prints the first few rows and columns.  Beneath the variable names (columns) it includes the data type
+
+###  (a) `filter()`
+**`filter()`** helps to return __rows__ with matching conditions. Base R approach to filtering forces you to use the data frame’s name repeatedly, yet `dplyr` approach is simpler to write and read. 
+
+The command structure (for all dplyr verbs):
+
+- First argument is the data frame you're working on
+- Return value is a data frame
+- Nothing is modified in place
+
+Note: `dplyr` generally does not preserve row names
+
+View all flights on January $1^{st}$:
+```{r filter, results='hide'}
+# Base R approach 
+flights[flights$Month==1 & flights$DayofMonth==1, ]
+
+# dplyr approach
+# Note: you can use comma or ampersand to represent AND condition
+filter(flights, Month==1, DayofMonth==1)
+```
+
+View all flights carried by American Airlines *OR* United Airlines:
+```{r filter2, results='hide'}
+# Base R approach 
+flights[flights$UniqueCarrier=="AA" | flights$UniqueCarrier=="UA", ]
+
+# Use pipe for OR condition
+filter(flights, UniqueCarrier=="AA" | UniqueCarrier=="UA")
+
+# You can also use %in% operator for OR condition
+filter(flights, UniqueCarrier %in% c("AA", "UA"))
+```
+
+
+###  (b) `select()`
+**`select()`** is used to pick a set of __columns__ by their names. Base R approach is awkward to type and to read. `dplyr` approach uses similar syntax to select columns, which is similar to a SELECT in SQL.
+
+Suppose we would like check three variables, DepTime, ArrTime and FlightNum:
+```{r select, results='hide'}
+# Base R approach to select DepTime, ArrTime, and FlightNum columns
+flights[, c("DepTime", "ArrTime", "FlightNum")]
+
+# dplyr approach
+select(flights, DepTime, ArrTime, FlightNum)
+```
+
+You can use colon to select multiple columns, and use `contains()`, `starts_with()`, `ends_with()`, and `matches()` to match any columns by specifying the keywords. For example, we want to select simultaneously all the variables between Year and DayofMonth (inclusive), the variables containing the character string "Taxi" and "Delay", and the variables that start with the character string "Cancel":
+
+```{r select2, results='hide'}
+# Select columns satisfying several conditions
+select(flights, Year:DayofMonth, contains("Taxi"), contains("Delay"), starts_with("Cancel"))
+
+```
+
+To select all the columns except a specific column, use the subtraction operator (also known as negative indexing). For instance, select all columns except for those between Year and TailNum:
+
+```{r select3, results='hide'}
+# Exclude columns 
+select(flights, -c(Year:TailNum))
+```
+
+###  (c) `chaining` or `pipelining` 
+
+The usual way to perform multiple operations in one line is by nesting them. Now we can write commands in a natural order by using the *%>%* infix operator (which can be pronounced as “then”). The main advantages of using %>% are the following:
+
+- Chaining increases readability significantly when there are many commands
+- Operator is automatically imported from the `magrittr` package
+- Chaining can be used to replace nesting in R commands outside of `dplyr`
+
+A toy example to illustrate that chaining reduces nesting commands: 
+```{r chaining, results='hide'}
+# Create two vectors and calculate the Euclidean distance between them
+x1 = 1:5; x2 = 2:6
+# Base R  will do
+sqrt(sum((x1-x2)^2))
+
+# Chaining will do
+(x1-x2)^2 %>% sum() %>% sqrt()
+```
+
+Note that the result on the left hand side of *%>%* will be passed as the first argument in the function on the right hand side of *%>%*.
+
+Suppose we want to filter for all records with delays over 60 minutes and display the UniqueCarrier and DepDelay for these observations.
+```{r chaining2, results='hide'}
+# Nesting method in dyplr to select UniqueCarrier and DepDelay columns and filter for 
+# delays over 60 minutes 
+filter(select(flights, UniqueCarrier, DepDelay), DepDelay > 60)
+
+# Chaining method serving for the same purpose
+flights %>%
+    select(UniqueCarrier, DepDelay) %>%
+    filter(DepDelay > 60)
+```
+
+### (d) `mutate()`
+
+**`mutate()`** is helpful for us to create new variables (features) that are functions of existing variables. Create a new column called Speed which is the ratio between Distance to AirTime.
+
+```{r mutate, results='hide'}
+# Base R approach to create a new variable Speed (in mph)
+flights$Speed = flights$Distance / flights$AirTime*60
+flights[, c("Distance", "AirTime", "Speed")]
+
+# dplyr approach 
+# Print the new variable Speed but does not save it in the original dataset 
+flights %>%
+    select(Distance, AirTime) %>%
+    mutate(Speed = Distance/AirTime*60)
+
+# Save the variable Speed in the original dataset 
+flights = flights %>% mutate(Speed = Distance/AirTime*60)
+```
+
+**Note**: all dplyr functions only display the results for you to view but not save them in the original dataset. If you want to make changes in the original dataset, you have to put `dataset =` as illustrated by above example.  
+
+
+### (e) `summarise()` (`summarize()`)
+
+**`summarise()`** is primarily useful with data that has been grouped by one or more features. It reduces multiple values to a single (or more) value(s). 
+
+- `group_by()` creates the groups that will be operated on. 
+
+- `summarise()` uses the provided aggregation function to summarise each group. 
+
+- `summarise_each()` allows you to apply the same summary function to multiple columns at once.
+
+Suppose we are interested in computing the average arrival delay to each destination:
+```{r summarise, results='hide'}
+# Base R approaches 
+with(flights, tapply(ArrDelay, Dest, mean, na.rm=TRUE))
+aggregate(ArrDelay ~ Dest, flights, mean)
+
+# dplyr approach 
+# Create a table grouped by Dest, and then summarise each group by taking the mean of ArrDelay
+flights %>%
+    group_by(Dest) %>%
+    summarise(avg_delay = mean(ArrDelay, na.rm=TRUE))
+```
+
+For each carrier, calculate the percentage of flights cancelled or diverted
+```{r summarise2, results='hide'}
+# dplyr approach 
+flights %>%
+    group_by(UniqueCarrier) %>%
+    summarise_each(funs(mean), Cancelled, Diverted)
+```
+
+### (f). Summary
+
+As seen above, we can use `dplyr` to perform the following data preprocessing procedures:
+
+- Aggregation: examples are computing the mean, standard deviation etc.  
+- Feature subset selection: drop unnecessary variables  
+- Dimensionality reduction: delete redundant records  
+- Feature creation: create new variables 
+
+------
+
+```{r, include=F}
+# Generate simulated data
+x <- tibble(User = paste('user', 1:3, sep=''))
+x
+
+# Create items, purch1, purch2, purch3
+items <- seq(1, 20, by=1)
+purch1 <- jitter(sign(sin(items)))
+purch2 <- jitter(sign(sin(items)))
+purch3 <- jitter(rep(0, length(items)))
+
+# Create matrix purch_datpurch1
+purch_dat <- cbind(round(100+0.2*round(100*purch1)), 
+           round(20+0.1*round(100*purch2)), 
+            round(35+0.1*round(500*purch3)))
+
+ord = sample.int(20)
+items = items[ord]
+purch_dat = t(purch_dat[ord,])
+
+colnames(purch_dat) = paste('item', 1:20, sep='')
+
+# purch_dat is currently a matrix
+purch_dat
+
+## convert to tibble
+purch_dat <- as_tibble(purch_dat)
+
+x <- bind_cols(x, purch_dat)
+x
+
+write_csv(x, path='online-shopping.csv')
+```
+
+
+## 2. Visualization 
+
+Suppose data consist purchase history of three users of an online shopping site. 
+```{r, warning=F}
+# read in data to tibble format using functions from "readr" package
+x = read_csv('online-shopping.csv')
+x
+```
+
+Note that `read_csv` returns a `tibble`, while `read.csv` returns a `data.frame`. We use `read_csv` here for better compatability with `tidyverse`.
+
+There are many situations where data is presented in a format that is not ready to dive straight to exploratory data analysis or to use a desired statistical method. The `tidyr` package provided with `tidyverse` provides useful functionality to avoid having to hack data around in a spreadsheet prior to import into R.
+
+The `gather()` function takes wide-format data and gathers it into long-format data. The argument `key` specifies variable names to use in the molten data frame.
+
+```{r, message=F, warning=F, fig.align='center',fig.width=4.5,fig.height=3}
+# ggplot2 should load automatically after loading tidyverse.  Otherwise use library(ggplot2)
+
+# Plot the data
+# Convert x transpose into a molten data frame
+xgathered <- x %>% gather(key='Product', value='Quantity', -User)
+
+# Use ggplot to expand a panel from xgathered; Use geom_line to add three curves representing 
+# the records of different users; add labels for each axis
+xgathered %>% ggplot(aes(x=Product, y=Quantity)) + 
+    geom_line(aes(group=User, color=User)) + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+Note the use of `gather()` function to reshape data into a format appropriate for `ggplot`. We can convert back to a wide format using the `spread()` function.  `gather` and `spread` are complements.
+
+
+```{r, message=F, warning=F, fig.align='center',fig.width=4.5,fig.height=3}
+# use the spread function convert xgathered back to wide format (xspread will be identical to x)
+xspread <- xgathered %>% spread(key="Product", value="Quantity")
+xspread
+```
+
+-----------------
+Credit: the original code is from <http://rpubs.com/justmarkham/dplyr-tutorial>.
+
+This lab material can be used for academic purposes only. 

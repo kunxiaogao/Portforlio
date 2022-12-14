@@ -1,0 +1,335 @@
+---
+title: 'Lab 2: k-Nearest Neighbors'
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+subtitle: PSTAT 131/231, Fall 2022
+header-includes: \usepackage{mathtools}
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, 
+                      cache=FALSE, 
+                      fig.width=5, 
+                      fig.height=5,
+                      fig.align='center')
+indent1 = '    '      
+indent2 = paste(rep(indent1, 2), collapse='')
+solcode = TRUE
+r = function(x, digits=2){ round(x, digits=digits) }
+```
+
+> ### Learning Objectives
+>
+> - k-Nearest Neighbors
+> - Training/Test split
+> - Run k-Nearest Neighbors methods in classification and regression problems
+> - Compute Training and Test error rates (in classification) and MSE (in regression)
+
+-------------------
+
+## 1. Install packages and obtatin `Carseats` dataset
+
+In this section, we will primarily focus on performing k-Nearest Neighbors for classification (using package `class`, which contains various functions for classification, including k-Nearest Neighbor) and regression (using package `FNN`). 
+
+The following packages are needed to assist our analysis:
+```{r pkg, message=F, warning=F, results='hide'}
+# install.packages("ISLR")
+# install.packages("tidyverse")
+# install.packages("class")
+# install.packages("FNN")
+
+# Load libraries
+library(ISLR)
+library(tidyverse)
+library(class)
+library(FNN)
+```
+
+The dataset `Carseats` in package `ISLR` is adopted to make an example task. 
+
+```{r data, results='hide'}
+# Obtain Carseats from ISLR using data()
+data(Carseats)
+# Check the structure by str()
+str(Carseats)
+# Get dataset info
+?Carseats 
+```
+
+
+## 2. k-Nearest Neighbors (a.k.a. kNN, k-NN, knn) classification 
+As a reminder, `Carseats` is a simulated data set containing sales of child car seats at 400 different stores on 11 features (3 discrete and 8 numerical). For the classification goal, we create a new feature `High` as the response variable following the rule:
+
+\[
+    High= 
+\begin{dcases}
+    \text{No},& \text{if Sales} \leq \text{median(Sales)}\\       
+    \text{Yes}, & \text{if Sales}  > \text{median(Sales)}
+\end{dcases}
+\]
+
+In this section, we will work on the binary response variable `High`, as well as other continuous variables except for `Sales`. The goal is to investigate the relationship between `High` and all continuous variables but `Sales`. 
+
+To achieve this goal, we will delete three categorical variables (`ShelveLoc`, `Urban` and `US`) and the continuous `Sales`[^1] from the original data. We call the resulting dataset `seats`:
+
+```{r seats, results='hide'}
+# Create the binary response variable High, drop Sales and 3 discrete independent 
+# variables as well. Call the new dataset seats
+seats = Carseats %>% 
+    mutate(High=as.factor(ifelse(Sales <= median(Sales), "Low", "High"))) %>%
+    select(-Sales, -ShelveLoc, -Urban, -US)
+
+# Check column names of seats
+colnames(seats)
+str(seats)
+
+# Another way to create seats using quantile()
+seats = Carseats %>%
+   mutate(High=as.factor(ifelse(Sales <= quantile(Sales, probs=0.5), "Low", "High"))) %>%
+   select(-Sales, -ShelveLoc, -Urban, -US)
+```
+### (a). Training/Testing split
+
+Given a data set, the use of a particular statistical learning method is warranted if it results in a low test (not training) error. The test error can be easily calculated if a designated test set is available. Therefore, before performing kNN on the data, we first sample 50% of the observations as a training set, and the other 50% as a test set. Note that we set a random seed before applying `sample()` to ensure reproducibility of results.
+
+```{r split}
+# Set random seed
+set.seed(333)
+
+# Sample 50% observations as training data
+train = sample(1:nrow(seats), 200)
+seats.train = seats[train,]
+
+# The rest 50% as test data
+seats.test = seats[-train,]
+```
+
+For later convenience purposes, we create `XTrain`, `YTrain`, `XTest` and `YTest`. `YTrain` and `YTest` are response vectors from the training set and the test set. `XTrain` and `XTest` are design matrices[^2].
+    
+```{r XY}
+# YTrain is the true labels for High on the training set 
+# XTrain is the standardized design matrix
+YTrain = seats.train$High
+XTrain = seats.train %>% select(-High) %>% scale(center = TRUE, scale = TRUE)
+?scale
+
+# YTest is the true labels for High on the test set, Xtest is the design matrix
+YTest = seats.test$High
+XTest = seats.test %>% select(-High) %>% scale(center = TRUE, scale = TRUE)
+```
+  
+### (b). Train a kNN classifier and calculate error rates
+
+- **`knn()`** function in the package `class` can be used to train a kNN classifier. This function works rather differently from the other model-fitting functions that we have encountered thus far. Rather than a two-step approach in which we first fit the model and then we use the model to make predictions, `knn()` forms predictions using a single command. The function requires at least four inputs.
+
+    * _train_: a matrix containing the predictors associated with the training data, i.e., design matrix of training set, labeled `Xtrain` below
+
+    * _test_: a matrix containing the predictors associated with the data for which we wish to make predictions, i.e., `Xtest`
+
+    * _cl_: a vector containing the class labels for the training observations, labeled `Ytrain` below.
+
+    * _k_: the number of nearest neighbors to be used by the classifier.
+
+
+
+- Now we apply `knn()` function to train the kNN classifier on the training set and make predictions on training and test sets. 
+
+    Notice that we set a random seed before applying `knn()` to ensure reproducibility of results. The random component in `knn()` is that if several observations are tied as nearest neighbors, then R will randomly break the tie, so a fixed seed instructs R to break the tie in the same way as we run the function multiple times.
+
+    - **Calculate training error rate** Recall that there are at least four arguments in `knn()` that should be specified. In order to get the training error, we have to train the kNN classifier on the **training** set and predict `High` on the same **training** set, then we can construct the 2 by 2 confusion matrix to get the training error rate. Based on this idea, we should have `train=XTrain`, `test=XTrain`, and `cl=YTrain` in `knn()`. We assume `k=2` is the best number of nearest neighbors for now, so we train a 2-NN classifier.
+
+```{r knn train, indent=indent2}
+set.seed(444)
+
+# knn - train the classifier and make predictions on the TRAINING set!
+pred.YTtrain = knn(train=XTrain, test=XTrain, cl=YTrain, k=2)
+
+# Get confusion matrix
+conf.train = table(predicted=pred.YTtrain, true=YTrain)
+conf.train
+
+# Trainning error rate
+1 - sum(diag(conf.train)/sum(conf.train))
+```
+
+
+    - **Calculate test error rate** To get the test error, we have to train the kNN classifier on the **training** set and predict `High` on the **test** set, then again we can construct the 2 by 2 confusion matrix to get the test error rate. Based on this idea, we should have `train=XTrain`, `test=XTest`, and `cl=YTrain` in `knn()`. Similarly as above, we set a random seed and try to train the 2-NN classifier.
+
+```{r knn test, indent=indent2}
+set.seed(555)
+
+# knn - train the classifier on TRAINING set and make predictions on TEST set!
+pred.YTest = knn(train=XTrain, test=XTest, cl=YTrain, k=2)
+
+# Get confusion matrix
+conf.test = table(predicted=pred.YTest, true=YTest)
+conf.test
+
+# Test error rate
+1 - sum(diag(conf.test)/sum(conf.test))
+```
+
+        The first thing to note is that the test error rate is higher than the training error rate, which is expected! But the test error rate obtained by 2-NN classifier is not ideal enough, since `r (1 - sum(diag(conf.test)/sum(conf.test)))*100`% of the test observations are incorrectly predicted, which is closed to a coin-tossing result. It will be no surprise to us that changing the number of neighbours ($k$) in the above `knn()` function will lead us to different training/test error rates. Among all possible values of neighbours, which would be the best one and what is the strategy to find this optimal value? The answer, in short, is by Cross-validation.
+
+## 3. k-Nearest Neighbors  regression 
+k-Nearest Neighbors method can also be used for regression problem. In this section, we still again consider the `Carseats` dataset, which is a simulated data set containing sales of child car seats at 400 different stores on 11 features (3 discrete and 8 numerical). For the regression goal, we are interested in investigating the relationship between the response `Sales` and predictors `Income`, `Advertising`, and `Price`. 
+
+To achieve this goal, we will construct a new dataset by selecting corresponding predictors and response, and we call the resulting dataset `sales`:
+```{r sales, results='hide'}
+# Create the selected dataset from Carseats, named sales
+sales = Carseats %>% 
+    select(Sales, Income, Advertising, Price)
+
+# Check column names of seats
+colnames(sales)
+str(sales)
+```
+
+### (a). Training/Testing split
+
+Following earlier steps, we again carry out the training/test split
+
+```{r split2}
+# Set random seed
+set.seed(333)
+
+# Sample 50% observations as training data
+train = sample(1:nrow(sales), 200)
+sales.train = sales[train,]
+
+# The rest 50% as test data
+sales.test = sales[-train,]
+```
+
+Following the naming conventions in Section 2, we create `XTrain`, `YTrain`, `XTest` and `YTest`. `YTrain` and `YTest` are response vectors from the training set and the test set. `XTrain` and `XTest` are design matrices.
+    
+```{r XY2}
+# YTrain is the true labels for High on the training set, XTrain is the standardized design matrix
+YTrain = sales.train$Sales
+XTrain = sales.train %>% select(-Sales) %>% scale(center = TRUE, scale = TRUE)
+
+# YTest is the true labels for High on the test set, Xtest is the design matrix
+YTest = sales.test$Sales
+XTest = sales.test %>% select(-Sales) %>% scale(center = TRUE, scale = TRUE)
+```
+  
+### (b). Train a kNN regressor and calculate MSE
+
+- **`knn.reg()`** function in the package `FNN` can be used to train a kNN regressor. Similar to the `knn()` function in classification setting, the function `knn.reg()` requires at least four inputs.
+
+    * _train_: a matrix containing the predictors associated with the training data, i.e., design matrix of training set, labeled `Xtrain` below
+
+    * _test_: a matrix containing the predictors associated with the data for which we wish to make predictions, i.e., `Xtest`
+
+    * _y_: responses for the training observations, labeled `Ytrain` below.
+
+    * _k_: the number of nearest neighbors to be used by the regressor.
+
+- The output of `knn.reg()` is a list (i.e., a combination of different objects in R). You can access the certain object inside the list by using the `$` operator. In particular, `$pred` returns the predictions on the test dataset.
+- Now we apply `knn.reg()` function to train the kNN regressor on the training set and make predictions on training and test sets. 
+
+
+    - **Calculate training MSE** Recall that there are at least four arguments in `knn.reg()` that should be specified. In order to get the training error, we have to train the kNN regressor on the **training** set and predict `Sales` on the same **training** set. Based on this idea, we should have `train=XTrain`, `test=XTrain`, and `y=YTrain` in `knn()`. We assume `k=2` is the best number of nearest neighbors for now, so we train a 2-NN regressor.
+
+```{r knn.reg train, indent=indent2}
+set.seed(444)
+
+# knn - train the regressor and make predictions on the TRAINING set!
+pred.YTtrain = knn.reg(train=XTrain, test=XTrain, y=YTrain, k=2)
+
+# Get confusion matrix
+head(pred.YTtrain)
+
+# Training MSE
+mean((pred.YTtrain$pred - YTrain)^2)
+```
+
+
+    - **Calculate test MSE** To get the test MSE, we have to train the kNN regressor on the **training** set and predict `Sales` on the **test** set. Based on this idea, we should have `train=XTrain`, `test=XTest`, and `y=YTrain` in `knn.reg()`. Similarly as above, we set a random seed and try to train the 2-NN regressor.
+
+```{r knn.reg test, indent=indent2}
+set.seed(555)
+
+# knn - train the regressor on TRAINING set and make predictions on TEST set!
+pred.YTest = knn.reg(train=XTrain, test=XTest, y=YTrain, k=2)
+
+head(pred.YTest$pred)
+
+# Test MSE
+mean((pred.YTest$pred - YTest)^2)
+```
+
+        Just as we discovered in the classification settting, the test MSE obtained by 2-NN regressor is not ideal enough. Again, it will be no surprise to us that changing the number of neighbours ($k$) in the above `knn.reg()` function will lead us to different training/test MSE. Can you try different values of ($k$) and see what is going on? Among all possible values of neighbours, which would be the best one and what is the strategy to find this optimal value? The answer, in short, is by Cross-validation. We will talk about Cross-Validation in the future.
+
+## 4. Drawing the test error in k-Nearest Neighbors regression 
+We can draw the actual responses and the prediction in the test dataset, and visually evaluate how the k-NN regressor performs.
+
+In this section, we will learn the relationship betweent `Sales` (as response) and `Price` (as the only predictor). The reason that we only consider one predictor is for visualization purpose.
+
+```{r plot}
+sales = Carseats %>% select(Sales, Price)
+set.seed(333)
+
+# Sample 50% observations as training data
+train = sample(1:nrow(sales), 200)
+sales.train = sales[train,]
+
+# The rest 50% as test data
+sales.test = sales[-train,]
+
+# Get XTrain and YTrain
+YTrain = sales.train$Sales
+XTrain = sales.train %>% select(-Sales) %>% scale(center = TRUE, scale = TRUE)
+
+# YTest is the true labels for High on the test set, Xtest is the design matrix
+YTest = sales.test$Sales
+XTest = sales.test %>% select(-Sales) %>% scale(center = TRUE, scale = TRUE)
+
+# knn - train the regressor on TRAINING set and make predictions on TEST set!
+# we consider two different values of k, k = 2 and k = 10, and
+# visually look at their difference
+pred.YTest.k2 = knn.reg(train = XTrain, test = XTest, y = YTrain, k = 2)
+pred.YTest.k10 = knn.reg(train = XTrain, test = XTest, y = YTrain, k = 10)
+
+# you can wrap the code manually like this, in order to prevent
+# having a very long command sentence in Rmd output file.
+data.plot.k2 <- data.frame(Sales = sales.test$Sales,
+                           Price = sales.test$Price,
+                           Pred = pred.YTest.k2$pred)
+
+data.plot.k10 <- data.frame(Sales = sales.test$Sales,
+                           Price = sales.test$Price,
+                           Pred = pred.YTest.k10$pred)
+
+# black dots represent the actual data points in test set
+# red line represents the 2-nn prediction
+data.plot.k2 %>% ggplot(aes(x=Price, y=Sales)) + geom_point() + 
+    geom_line(aes(x = Price, y=Pred, color="red")) + theme(legend.position = "none") +
+  ggtitle("k = 2")
+
+# draw the same plot for 10-nn
+data.plot.k10 %>% ggplot(aes(x=Price, y=Sales)) + geom_point() + 
+    geom_line(aes(x = Price, y=Pred, color="red")) + theme(legend.position = "none") + 
+  ggtitle("k = 10")
+```
+
+We observe that `2-nn` regressor yields more wiggly prediction curve than `10-nn`. Recall in the lecture that `2-nn` is more flexible than `10-nn`, meaning that `2-nn` could have smaller bias and higher variance than `10-nn`. This is reflected in these two plots. The prediction curve for `2-nn` fits the data points better (low bias), but is more wiggly (higher variance).
+
+We get a conceptual and visual undertanding how `2-nn` and `10-nn` perform in comparison, but how do we know exactly which is better? We need to compute the test MSE for both methods on the test dataset. We have shown how to do it in the previous section.
+
+[^1]: Note: we delete `Sales` from the explanatory variables is due to the fact that `High` is derived from it.
+
+[^2]: Design matrix, also known as regressor matrix or model matrix, is a matrix of
+values of explanatory variables, often denoted by X. Each row represents an individual
+observation, with the successive columns corresponding to the variables and their
+specific values for that object.
+
+[^3]: '...' notation is used when defining `do.chunk()` function. This syntax is called dot-dot-dot. `do.chunk()` stores all but the first four variables in the ellipsis variable.
+
+[^4]: The $k$ in k-fold CV is different from the $k$ in kNN!
+
+[^5]: Note: if you are not familiar with any of `filter()`, `group_by()` and `summarise_each()`, please look for the details in Lab02 material.
+

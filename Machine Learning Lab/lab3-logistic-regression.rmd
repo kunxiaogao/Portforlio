@@ -1,0 +1,357 @@
+---
+title: 'Lab 3: Logistic Regression'
+output: pdf_document
+subtitle: PSTAT 131/231, Fall 2022
+header-includes: \usepackage{mathtools}
+urlcolor: blue
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, 
+                      cache=FALSE, 
+                      fig.width=5, 
+                      fig.height=5,
+                      fig.align='center')
+indent1 = '    '      
+indent2 = paste(rep(indent1, 2), collapse='')
+```
+
+
+> ### Learning Objectives
+>
+> - Theoretical background of logistic regression model
+>       - The reason that we use link functions
+>       - Log-odds
+>       - Model assumptions
+> - Fit logistic model using `glm()`
+>       - Use `glm()` to fit the model
+>       - Coefficients interpretation
+>       - Use `predict()` to obtain $p(X)$
+>       - Construct confusion matrix
+> - Receiver Operating Characteristic (ROC) curve
+>       - Use `prediction()` to transform input data into a standardized format 
+>       - Use `performance()` to get FPR and FNR
+>       - Construct ROC curve 
+>       - Compute the Area under the Curve (AUC) 
+
+-------------------
+
+## 1. Obtain dataset *Discrim* and raise several questions
+
+### (a) Dataset description
+
+*Discrim* is a simulated dataset containing $n=28$ job interview outcomes of a company on $p=4$ features. 
+
+- `HIRING`: response variable with two levels, "1" stands for YES and "0" for NO
+- `EDUCATION`: years of college education, three values are available
+- `EXPERIENCE`: years of working experience
+- `GENDER`: "1" for MALE and "0" for FEMALE
+
+```{r, warning=FALSE, message = FALSE, indent=indent1}
+library(tidyverse)
+# Read the txt file from your current working directory 
+Dis = read.table("Discrim.txt", header=T)
+# Convert Dis into a data frame
+Dis = as_tibble(Dis)
+str(Dis)
+```
+
+    Since this dataset contains only 28 observations, this time we do not split it into training and test sets. We will fit the logistic regression model on the whole data (training set) and create a small new dataset in order to make predictions (test set)[^1]. Notice that `HIRING` and `GENDER` are integer-value coded, therefore we have to discretize them.
+
+```{r, warning=FALSE, message=FALSE,indent=indent1}
+# install.packages("dplyr")
+library(dplyr)
+Dis = Dis %>%
+  mutate(HIRING=as.factor(ifelse(HIRING==0,"No", "Yes"))) %>%
+  mutate(GENDER=as.factor(ifelse(GENDER==0,"F", "M")))
+str(Dis)
+```
+
+    Let's check some explanatory analysis on the dataset.
+    
+```{r,comment=NA, indent=indent1}
+table(Dis$GENDER,Dis$HIRING)
+```
+
+    - Among $15$ *FEMALE* applying, $3$ have been hired (`r round(100*3/15,digits=2)`%)
+
+    - Among $13$ *MALE* applying, $6$ have been hired (`r round(100*6/13,digits=2)`%)
+
+```{r, warning=FALSE, message=FALSE, fig.asp=0.4, indent=indent1, fig.align="cetner", fig.width=5, fig.height=3.5}
+# install.packages("ggplot2")
+library(ggplot2)
+# Use qplot to make a boxplot of EXPERIENCE vs GENDER
+qplot(Dis$HIRING, Dis$EXPERIENCE, data = Dis, geom = "boxplot")
+```
+
+    - Among $28$ candidates, those who got hired tend to have higher *EXPERIENCE* values. 
+
+### (b) Interesting questions 
+
+Based on the dataset, we may pose some intriguing questions like
+
+* Why is a logistic regression model better than a linear one?  
+* What is the probability of being hired given some features of candidates (`EDUCATION`, `EXPERIENCE` and `GENDER` of a candidate)?  
+* Does each predictor actually have impact on the estimated probabilities in the logistic model?  
+* Can we formally verify (with a test) whether there is evidence of discrimination based on Gender?  
+* ...
+
+## 2. Logistic Regression
+
+### (a) Review the theoretical background
+If we are dealing with a binary classification problem, how should we model the relationship between $p(X) = Pr(Y = 1|X_1,...,X_p)$ and $X_i's$? (Notice that we are using the generic 0/1 coding for the response) One possible answer may be estimating $p(X) = Pr(Y = 1|X_1,...,X_p)$ by linear model, that is $$p(X) =\beta^TX=\beta_0+\beta_1X_1+...+\beta_pX_p$$
+
+However we see the problem with this approach: the left-hand-side, $p(X) = Pr(Y = 1|X_1,...,X_p)$, must fall between 0 and 1 because it's intrinsically a probability; yet if we were to predict for the right-hand-side, we would get values bigger than 1 or less than 0. Any time a straight line is fit to a binary response that is coded as 0 or 1, in principle we can always predict $p(X) < 0$ for some values of $X$ and $p(X) > 1$ for others (unless the range of $X$ is limited).
+
+To avoid this problem, we must model $p(X)$ using a function that gives outputs between 0 and 1 for all values of $X$. In logistic regression, we use the logistic function $$p(X)=\frac{e^{\beta^TX}}{1+e^{\beta^TX}}=\frac{e^{\beta_0+\beta_1X_1+...+\beta_pX_p}}{1+e^{\beta_0+\beta_1X_1+...+\beta_pX_p}}$$
+Notice the right-hand-side fraction now yields probability strictly between 0 and 1. It is never below 0 or above 1. In addition, the logistic function will always produce an S-shaped curve, and so regardless of the value of $X_i's$, we will obtain a sensible prediction. We also see that the logistic model is better able to capture the range of probabilities than is the linear regression model in the binary classification setting.
+
+After a bit of manipulation and taking the logarithm, we arrive at $$log \Big (\frac{p(X)}{1-p(X)} \Big)=\beta^TX$$
+The left-hand-side is called the **log-odds** or **logit**, which is the link function in a logistic regression.
+
+### (b) Build and summarise a logistic regression model 
+
+- **`glm()`** is used to fit generalized linear models. The usage of `glm()` is pretty much like that of `lm()` with one more necessary argument `family`. Specifying **`family=binomial`** produces a logistic regression model. By default, `family=binomial` uses logit as its link function. More options such as probit, log-log link are also available. As described previously, `HIRING` is our response and `EDUCATION`, `EXPERIENCE` and `GENDER` are predictors.
+
+- **`summary()`** is a generic function that is used to produce result summaries of various model fitting functions. We can call the `summary()` of our glm object after fitting it and expect several things to be reported:
+
+    * _Call_: this is R reminding us what the model we ran was, what options we specified, etc  
+    * _Deviance residuals_: measures of model fit. This part of output shows the distribution of the deviance residuals for individual cases used in the model  
+    * _Coefficients_: shows the coefficients, their standard errors, the Z-statistic (sometimes called a Wald Z-statistic), and the associated p-values  
+    * _Fit indices_: goodness-of-fit measures including the null and deviance residuals, and the AIC. 
+
+```{r glm, indent=indent1}
+# Specify 'family=binomial' is important!
+glm.fit = glm(HIRING ~ EDUCATION + EXPERIENCE + GENDER,
+             data=Dis, family=binomial)
+# Summarize the logistic regression model
+summary(glm.fit)
+```
+  
+### (c) Interpret coefficients 
+In above results, Both `EXPERIENCE` and `GENDERM` are statistically significant at level 0.01. Let's take a look at the interpretation of the model coefficients. The logistic regression coefficients, if logit link function is used, give the change in the log odds of the outcome for a one unit increase in a predictor variable, while others being held constant. Therefore: 
+
+* The variable `EXPERIENCE` has a coefficient `r round(summary(glm.fit)$coef[3],digits=4)`. For every one unit change in `EXPERIENCE`, the log odds of getting hired (versus not-hired) increases by 0.9098, holding other variables fixed   
+
+* The variable `EDUCATION` has a coefficient `r round(summary(glm.fit)$coef[2],digits=4)`. For a one unit increase in `EDUCATION`, the log odds of being hired increases by 1.1549, holding other variables fixed  
+
+* The indicator variable for `GENDERM` has a slightly different interpretation. The variable `GENDERM` has a coefficient `r round(summary(glm.fit)$coef[4],digits=4)`, meaning that the indicator function of `MALE` has a regression coefficient `r round(summary(glm.fit)$coef[4],digits=4)`. That being said, the gender `MALE` versus `FEMALE`, changes the log odds of getting hired by 5.6037.
+
+### (d) Construct confusion matrix for the training data 
+
+- As a reminder from Lab03, we discussed how to use **`predict()`** function to get the actual class predictions of a classification tree. There, we specified `type="class"` because the response variable `High` was binary. However, in the context of a logistic regression problem, even though we still have a binary response (like `HIRING`), we are more inclined to use **`type="response"`** in `predict()` function to get a sequence of probabilities. To predict the classes of the response from the sequence of probabilities, we will select the best threshold value in (3d).
+    Using `fitted()` function will get the model's estimated hiring probabilities. Notice that both ways (`fitted()` and `predict()`) are good to go, commonly you have to make it clear that **`type="response"`**.
+
+```{r pred, indent=indent1}
+# Specify type="response" to get the estimated probabilities
+prob.training = predict(glm.fit, type="response")
+
+# Round the results to a certain number of decimal places by round(). For instance, 
+# we can round prob.training to 2 decimal places
+round(prob.training, digits=2)
+```
+
+- We want to construct the confusion matrix for the training data. The true labels of `HIRING` (either No or YES) are available in the dataset, but how do we obtain the predicted labels from the model's estimated hiring probabilities, i.e., from `prob.training`? 
+
+    The answer is a two-step approch: pick the threshold value in order to assign labels, then assign the labels. Some natural questions arise, for instance, is $0.5$ always our best choice? Let's keep this question in mind for a while and use $p_{threshold}=0.5$ first as an example to complete the confusion matrix construction.
+
+```{r, indent=indent1}
+# Save the predicted labels using 0.5 as a threshold
+Dis = Dis %>%
+  mutate(predHIRING=as.factor(ifelse(prob.training<=0.5, "No", "Yes")))
+# Confusion matrix (training error/accuracy)
+table(pred=Dis$predHIRING, true=Dis$HIRING)
+```
+
+    * Out of 28 cases, the model classifies $18+7 = 25$ correctly (`r round(25/28*100,digits=2)`%)  
+    * Out of 19 NOT HIRED, the model classifies  $18$ correctly (`r round(18/19*100,digits=2)`%)  
+    * Out of 9 HIRED, the model  classifies 7 correctly (`r round(7/9*100,digits=2)`%)
+
+### (e) Estimate hiring probabilities for the new data
+
+To have a better understanding of the model, let's predict the hiring probabilities for the new cases defined in below as `test`.
+
+```{r}
+# Create a new 'test' set for prediction
+test = tibble("EDUCATION"=c(4,4,4,4,8,8,8,8),
+                  "EXPERIENCE"=c(6,6,10,10,6,6,10,10),
+                  "GENDER"=c("F","M","F","M","F","M","F","M"))
+
+# Predict the hiring probabilities and round the predict results to 5 decimals
+prob.test = round(predict(glm.fit, test, type="response"),digits=5)
+test = test %>%
+  mutate(Probability=prob.test)
+test
+```
+
+Several conclusion can be drawn here. For example, when `EXPERIENCE` is low, `MALE` have much higher probabilities of being hired. Differences diminish for higher levels of `EDUCATION` and `EXPERIENCE`.
+
+### (f) More analysis for fun
+
+- *MALE* group:
+
+```{r,comment=NA, indent=indent1}
+table(pred=Dis$predHIRING[Dis$GENDER=="M"],true=Dis$HIRING[Dis$GENDER=="M"])
+```
+
+- *FEMALE* group
+
+```{r,comment=NA, indent=indent1}
+table(pred=Dis$predHIRING[Dis$GENDER=="F"],true=Dis$HIRING[Dis$GENDER=="F"])
+```
+
+
+## 3. Construct ROC curve and compute AUC
+
+### (a) Types of errors
+
+**False positive rate**: The fraction of negative examples that are classified as positive. In our analysis, *FPR* is the portion of no-hiring candidates (No) that are classified as hiring (Yes).
+
+**False negative rate**: The fraction of positive examples that are classified as negative. In our analysis, *FNR* is the portion of hiring candidates (Yes) that are classified as not hiring (No).
+
+We can change the two error rates by changing the threshold
+from 0.5 to some other value in [0, 1]: $$P\text{(HIRING=Yes}|\text{EXPERIENCE,EDUCATION,GENDER)} \geq \text{threshold}$$ and vary *threshold*.
+
+### (b) Construct ROC curve 
+
+The `ROCR` package can be used to produce ROC curves, like those you have seen in lecture. Specifically, **`prediction()`** and **`performance()`** are the most important two functions for generating a ROC curve. Every classifier evaluation using `ROCR` starts with creating a prediction object.
+
+- **`prediction()`** is used to transform the input data (which can be in vector, matrix, data frame, or list form) into a standardized format. The first argument is the predicted probabilities obtained from the training set, the second is true labels.
+
+- **`performance()`** is to perform all kinds of predictor evaluations. Here, specifically, we use it to get the True Positive Rate by writing `measure='tpr'` and False Positive Rate by `measure='fpr'`.
+
+    Firstly, we transform the predicted probabilities for the training set into a standardized format used for ROC curve. The predicted probabilites are saved as `prob.training` in section (2d).
+    
+```{r, warning=FALSE, message=FALSE, fig.asp=0.6, indent=indent1}
+# install.packages("ROCR")
+library(ROCR)
+
+# First arument is the prob.training, second is true labels
+pred = prediction(prob.training, Dis$HIRING)
+```
+    
+    Secondly, we calculate the True Positive Rate and False Positive Rate by `performance()`.
+
+```{r, indent=indent1}
+# We want TPR on the y axis and FPR on the x axis
+perf = performance(pred, measure="tpr", x.measure="fpr")
+```
+
+    Lastly, plot the object you obtained above, and you will have the ROC curve!
+    
+```{r, indent=indent1,fig.asp=0.7}
+plot(perf, col=2, lwd=3, main="ROC curve")
+abline(0,1)
+```
+
+    If you want to practice generating ROC curve manually, use the following code.
+```{r, indent=indent1,eval=F}
+tpr = performance(pred, "tpr")@y.values[[1]]
+fpr = performance(pred, "fpr")@y.values[[1]]
+plot(fpr, tpr, type="l", col=3, lwd=3, main="ROC curve")
+abline(0,1)
+```
+
+### (c) Compute AUC
+
+Often we use the **AUC** or **area under the curve** to summarize the overall performance of a model. Higher AUC is better. We can use `performance()` again to compute AUC as follows:
+
+```{r}
+# Calculate AUC
+auc = performance(pred, "auc")@y.values
+auc
+```
+
+
+
+### (d) Determine the best threshold value
+We want to control **False Negative Rate** and **False Positive Rate** to be as small as possible at the same time. Therefore, we'd like to choose probability threshold that is closest to $(FPR,FNR)=(0,0)$. There are multiple ways to determine which threshold value corresponds to the smallest distance from $(FPR,FNR)$ to $(0,0)$. One possible choice is to calculate the euclidean distance between each point of $(FPR,FNR)$ and $(0,0)$.
+
+- Obtain FPR and FNR from `performance()` output:
+
+```{r, indent=indent1}
+# FPR
+fpr = performance(pred, "fpr")@y.values[[1]]
+cutoff = performance(pred, "fpr")@x.values[[1]]
+# FNR
+fnr = performance(pred,"fnr")@y.values[[1]]
+```
+
+- Plot FPR and FNR versus threshold values using `matplot()`:
+
+```{r, indent=indent1, fig.asp=0.7}
+# Plot
+matplot(cutoff, cbind(fpr,fnr), type="l",lwd=2, xlab="Threshold",ylab="Error Rate")
+# Add legend to the plot
+legend(0.3, 1, legend=c("False Positive Rate","False Negative Rate"), 
+       col=c(1,2), lty=c(1,2))
+```
+
+- Calculate the euclidean distance between (FPR,FNR) and (0,0)
+```{r, indent=indent1}
+rate = as.data.frame(cbind(Cutoff=cutoff, FPR=fpr, FNR=fnr))
+rate$distance = sqrt((rate[,2])^2+(rate[,3])^2)
+```
+
+- Select the probability threshold with the smallest euclidean distance
+
+```{r, indent=indent1, fig.asp=0.7}
+index = which.min(rate$distance)
+best = rate$Cutoff[index]
+best
+# Plot
+matplot(cutoff, cbind(fpr,fnr), type="l",lwd=2, xlab="Threshold",ylab="Error Rate")
+# Add legend to the plot
+legend(0.35, 1, legend=c("False Positive Rate","False Negative Rate"), 
+       col=c(1,2), lty=c(1,2))
+# Add the best value
+abline(v=best, col=3, lty=3, lwd=3)
+```
+
+    Therefore, our best cutoff value is `r round(best,4)` which corresponds to the smallest Euclidean distance `r round(rate$distance[index],4)`. That being said, hiring probabilities less than `r round(best,4)` should be predicted as **No** and higher than `r round(best,4)` as *Yes*.
+
+```{r, fig.asp=0.6, include=FALSE}
+# for your interest, the best cutoff value can be selected by the following for loop
+tlab = Dis$HIRING
+rate = NULL
+all = seq(0.0002,0.99999,0.01)
+
+# write a for loop for different values of threshold
+for (i in all) {
+  temp = as.factor(ifelse(prob.training<=i, "No", "Yes"))
+  error = table(temp, tlab)
+  # calculate FPR and FNR
+  fpfn = cbind(threshold=i,FP=error[2]/(error[1]+error[2]),FN=error[3]/(error[3]+error[4])) 
+  rate = as.data.frame(rbind(rate,fpfn)) # save the values
+}
+
+
+# use matplot to plot the FPR and FNR versus threshold values
+matplot(all, rate[,-1], type="l",lwd=2, xlab="Threshold",ylab="Error Rate")
+# add legend to the plot
+legend("top", legend=c("False Positive Rate","False Negative Rate"), 
+       col=c(1,2), lty=c(1,2))
+
+# calculate the euclidean distance between (FPR,FNR) and (0,0)
+rate$distance = sqrt((rate[,2])^2+(rate[,3])^2)
+# select the probability threshold with the smallest euclidean distance
+index = which.min(rate$distance)
+best = rate$threshold[index]
+best
+abline(v=best, col=3, lty=3, lwd=3)
+```
+
+## Your turn
+
+- Compute the odds $\frac{\widehat {p(X)}}{1-\widehat {p(X)}}$ for *MALE* and *FEMALE* separately
+```{r, results='hide', indent=indent1}
+prob.training
+```
+- Make boxplot of the odds versus each gender  
+- Compare the difference between the median odds for *MALE* and *FEMALE*  
+- State in plain words what the interpretation of odds are
+
+
+
+
+
+[^1]: If the sample size of a dataset is too limited to be divided, you can use the whole dataset as the training, and construct an artificial test set.

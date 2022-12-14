@@ -1,0 +1,302 @@
+---
+title: 'Lab 6: Decision Trees'
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+subtitle: PSTAT 131/231, Fall 2022
+header-includes: \usepackage{mathtools}
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, 
+                      cache=FALSE, 
+                      fig.width=5, 
+                      fig.height=5,
+                      fig.align='center')
+indent1 = '    '      
+indent2 = paste(rep(indent1, 2), collapse='')
+solcode = TRUE
+r = function(x, digits=2){ round(x, digits=digits) }
+```
+
+> ### Learning Objectives
+> - Fit decision tree models using package `tree` and `base`
+>       - `tree()` and `summary()`
+>       - `predict()` and `table()`
+>       - `cv.tree()` and `prune.tree()`
+> - Decision trees visualization
+
+------
+
+
+## 1. Install packages and import dataset
+
+We are going to use the dataset `Carseats` in the package `ISLR` and various tree-fitting functions in `tree`. As we have seen in previous labs, `Carseats` is a simulated data set containing sales of child car seats at 400 different stores on 11 features. The features include: `Sales`, `CompPrice`, `Income`, `Advertising`, `Population`, `Price`, `ShelveLoc`, `Age`, `Education`, `Urban` and `US`. Among all the variables, `ShelveLoc`, `Urban` and `US` are categorical and the rest are continuous. 
+
+Notice that originally `Sales` is a continuous variable. Just as in Lab 2, we create a new binary variable `High` using `Sales`:
+
+\[
+    \text{High}= 
+\begin{dcases}
+    \text{No},& \text{if Sales} \leq \text{median(Sales)}\\       
+    \text{Yes}, & \text{if Sales}  > \text{median(Sales)}
+\end{dcases}
+\]
+
+
+Our goal is to investigate how other features (`CompPrice`, `Income`, `Advertising`, `Population`, `Price`, `ShelveLoc`, `Age`, `Education`, `Urban` and `US`)  influence whether the unit sales at each location is high or not. In other words, we look for the relationship between the binary response `High` and all variables but `Sales`.
+
+We first load in the data, and the required packages needed for using decision trees:
+```{r pkg, message=F, warning=F, results='hide'}
+
+##install.packages("ISLR")
+##install.packages("tree")
+##install.packages('maptree')
+
+# Load libraries
+library(ISLR) 
+library(tree)
+library(maptree)
+
+# Utility library
+library(dplyr)
+```
+
+Using `mutate()` and `ifelse()` to create the binary response variable `High`, then check the structure of resulting data frame with the following codes:
+
+```{r}
+# Create data frame with the oringinal eleven variables and High 
+Carseats = Carseats %>% 
+    mutate(High=as.factor(ifelse(Sales <= median(Sales), "No", "Yes")))
+
+# Check the structure of above data frame we just created
+glimpse(Carseats)
+```
+
+## 2. A decision tree trained with the entire dataset
+
+Based on the data frame `Carseats` with `High`, we will build a classification tree model, in which `High` will be the response (dependent variable), and the rest 10 features, excluding `Sales`, will be the predictors (independent variables). The classification tree model can be built with function `tree()` in the package `tree`. (Yeah, they share the same name!)
+
+### (a). Fit and summarize the tree
+
+- **`tree()`** can be used to fit both classification and regression tree models. A regression tree is very similar to a classification tree, except that it is used to predict a quantitative response rather than a qualitative one. In this lab, we will focus on classification trees. We put the response variable on the left of tilde, explanatory variables on the right of tilde; the dot is merely an economical way to represent "everything else but High"[^1]. Recall that this syntax is exactly the same as we use in fitting **`lm()`**, **`glm()`**, but different from **`glmnet()`**. 
+
+```{r tree, message=F, warning=F, indent=indent1}
+tree.carseats = tree(High ~.-Sales, data = Carseats)
+```
+
+- **`summary()`** is a generic function used to produce result summaries of various model fitting functions. When we call the `summary` of a tree, we will have the following reported:
+
+    * _Classification tree_: displays the model and the dataset
+    * _Variables ... construction_: variables that are truly useful to construct the tree 
+    * _Number ... nodes_: the number of leaf node, which is a node that has no child nodes. Let's denote this quantity as $T_0$ for further reference
+    * _Residual mean deviance_: is simply the deviance divided by $n-T_0$, which in this case is $400-23 = 377$
+    * _Misclassification error rate_: is the number of wrong predictions divided by the number of total predictions (on the input dataset). This is really the training error rate.
+  
+      
+```{r sumary, indent=indent1}
+summary(tree.carseats)
+```
+    
+### (b). Visualize the tree
+There are essentially two ways of visualizing a tree fitted from `tree` function call.
+
+- The built-in function **`plot`** and **`text`** in the `tree` package, demonstrated as follows:
+```{r pic1, indent = indent1}
+plot(tree.carseats)
+text(tree.carseats, pretty = 0, cex = .4, col = "red")
+title("decision tree on Carseats", cex = 0.8)
+```
+  
+Note that **`text()`** is to display the node labels. The argument `pretty=0` instructs R to include the category names for any qualitative predictors, rather than simply displaying a letter for each category. The function **`title()`** is to display the theme of the plot. **`cex`** controls the size of labels in the plots.
+
+- Alternatively, **`draw.tree()`** in the `maptree` package is helpful for visualizing the structure
+  <!-- ```{r pic2,indent=indent1} -->
+  <!-- draw.tree(tree.carseats, nodeinfo=TRUE, cex = 0.4) -->
+  <!-- draw.tree(prune.tree(tree.carseats, best=10), nodeinfo=TRUE, cex = 0.4) -->
+  <!-- ``` -->
+  
+```{r pic2, indent = indent1}
+draw.tree(tree.carseats, nodeinfo=TRUE, cex = 0.4)
+```
+
+## 3. A decision tree trained with training/test split 
+
+In order to properly evaluate the performance of a classification tree, we should estimate the **test error rate** rather than simply compute the training error rate. Therefore, as what we have been doing in this course, we split all observations into a **training set** and a **test set**, build the tree using the training set, and evaluate the model's performance on the test set. 
+
+### (a). Split the data into a training set and a test set
+
+We sample 75% of observations as the training set and the rest 25% as the test set.
+
+```{r sep}
+# Set random seed for results being reproducible
+set.seed(3)  
+# Get dimension of dataset
+dim(Carseats) 
+# Sample 75% of observations as the training set
+train = sample(nrow(Carseats), 0.75*nrow(Carseats)) 
+Carseats.train = Carseats[train, ]
+# The rest 25% as the test set 
+Carseats.test = Carseats[-train,]  
+
+# For later convenience in coding, we create High.test, which is the true labels of the 
+# test cases
+High.test = Carseats.test$High
+```
+
+### (b). Fit the tree on training set and compute test error rate
+
+- **`tree()`** can be used to grow the tree as we discussed in the previous section.
+- **`predict()`** is helpful to predict the response (`High`) on the test set. In the case of a classification tree, specifying `type="class"` instructs R to return the actual class predictions instead of probabilities.
+
+    As discussed earlier, we build the model on the training set and predict the labels for `High` on the test set:
+    
+```{r test, indent=indent1}
+# Fit model on training set
+tree.carseats = tree(High~.-Sales, data = Carseats.train) 
+
+# Plot the tree
+draw.tree(tree.carseats, nodeinfo=TRUE, cex = 0.4)
+title("Classification Tree Built on Training Set")
+
+# Predict on test set
+tree.pred = predict(tree.carseats, Carseats.test, type="class") 
+tree.pred
+```
+
+- To calculate the test error rate, we can construct a confusion matrix and use the counter diagonal sum divided by the total counts.
+    
+```{r conf, indent=indent1}
+# Obtain confusion matrix
+error = table(tree.pred, High.test)
+error
+# Test accuracy rate
+sum(diag(error))/sum(error)
+# Test error rate (Classification Error)
+1-sum(diag(error))/sum(error)
+```
+
+  This approach leads to correct predictions for
+  `r 100*sum(diag(error))/sum(error)`% of the locations in the test set. In
+  other words, the test error rate is `r 100*(1-sum(diag(error))/sum(error))`%.
+  
+  Note that this is really equivalant to
+```{r indent=indent1}
+mean(tree.pred != High.test)
+```
+
+## 4. Prune the tree using `cv.tree()` and `prune.misclass()`
+
+Next, we consider whether pruning the tree might lead to a lower test error. To do so, primarily we have to decide what the best size of the tree should be, then we can trim the tree to this pre-determined size. 
+
+### (a). Determine the best size 
+
+By 'best' size, for example, if we use classification error rate to guide the pruning process, we mean the number of terminal nodes which corresponds to the **smallest** classification error. There are multiple ways of pruning trees in R. Here we focus on a k-fold cross-validation approach.
+<!-- There are other goodness-of-fit measures available, such as deviance, the 'best' size in this case is the number of leaf nodes which gives the smallest deviance.  -->
+<!-- We have two ways to determine the best size of the tree: either use **`prune.tree()`** or **`cv.tree()`**, which are both from package `tree`. -->
+
+<!-- - **`prune.tree()`** does a cost-complexity pruning of a tree object. The argument `method` is the scoring measure used to trim the tree. The argument `k` is user-specified cost-complexity parameter, and `best` instructs R to return a tree exactly of this size. Larger the cost-complexity `k`, smaller the tree, although cost-complexity `k` does not correspond to tree size in any exact way. (`k` is similar to parameter $\alpha$ in equation 8.4 in ISLR). `prune.tree()` yields several results such as sizes of the trees, complexity parameters and guiding method of the pruning.  -->
+
+<!-- ```{r, indent=indent1} -->
+<!-- prune = prune.tree(tree.carseats, k = 0:20, method = "misclass") -->
+<!-- # Best size -->
+<!-- best.prune = prune$size[which.min(prune$dev)] -->
+<!-- best.prune -->
+<!-- ``` -->
+
+- **`cv.tree()`** performs k-fold Cross-validation in order to determine the optimal level of tree complexity; cost-complexity pruning is used in order to select a sequence of trees for consideration. The argument `FUN=prune.misclass` is to indicate that misclassification error should guide the Cross-validation and pruning process, rather than the default deviance in the `cv.tree()` function. `K=10` instructs R to use a 10-fold Cross-validation in order to find the best size. The `cv.tree()` function reports the number of terminal nodes of each tree considered, as well as the corresponding error rate and the value of the cost-complexity parameter `k` used.
+
+```{r prune, indent=indent1}
+# Set random seed
+set.seed(3) 
+
+# K-Fold cross validation
+cv = cv.tree(tree.carseats, FUN=prune.misclass, K=10)
+# Print out cv
+cv$size
+cv$dev
+
+# Best size 
+# note that there is a tie
+# tree of size 21 and size 16 both have the minimum CV estimate of test error rate
+# we prefer the tree with smaller size
+best.cv = min(cv$size[cv$dev == min(cv$dev)])
+best.cv
+```
+
+    Note that, despite the name, `$dev` is the Cross-validation error instead of deviance. The tree with `r best.cv` terminal nodes results in the lowest error.
+
+### (b). Error vs. Best Size plot
+```{r, indent=indent1, fig.height=3.5}
+  # Plot size vs. cross-validation error rate
+  plot(cv$size , cv$dev, type="b", 
+       xlab = "Number of leaves, \'best\'", ylab = "CV Misclassification Error",
+       col = "red", main="CV")
+  abline(v=best.cv, lty=2)
+  # Add lines to identify complexity parameter
+  min.error = which.min(cv$dev) # Get minimum error index
+  abline(h = cv$dev[min.error],lty = 2)
+```
+
+### (c) Prune the tree and visualize it
+
+- Note that **`cv.tree()`** only helps determine the best tree complexity. We then use **`prune.misclass`** to prune a tree in order to have a tree with targeted best number of terminal nodes.
+
+    Let's trim `tree.carseats` to have `r best.cv` nodes. This number was determined by `cv.tree()`.
+
+```{r, indent=indent1}
+# Prune tree.carseats
+pt.cv = prune.misclass (tree.carseats, best=best.cv)
+
+# Plot pruned tree
+plot(pt.cv)
+text(pt.cv, pretty=0, col = "blue", cex = .5)
+title("Pruned tree of size 16")
+```
+
+### (d) Calculate respective test error rate for model `pt.cv`
+
+Recall that in (3b), we built `tree.carseats` on the training set and obtained the test error rate. In (4c), we trimmed the tree in using CV to get `pt.cv`, thus we want to see if the trimmed tree is better than `tree.carseats`, judged by the test error rate. Let's predict the labels for `High` on test set for two models and construct confusion matrices.
+
+```{r conf2, indent=indent1}
+  # Predict on test set
+  pred.pt.cv = predict(pt.cv, Carseats.test, type="class") 
+  # Obtain confusion matrix
+  err.pt.cv = table(pred.pt.cv, High.test)
+  err.pt.cv
+  # Test accuracy rate
+  sum(diag(err.pt.cv))/sum(err.pt.cv)
+  # Test error rate (Classification Error)
+  1-sum(diag(err.pt.cv))/sum(err.pt.cv)
+```
+
+The test error rate for `pt.cv` is `r 1-sum(diag(err.pt.cv))/sum(err.pt.cv)`, which is identical to (3b). Basically that means we get a simpler tree for free (without any cost in prediction error rate) by pruning. We would thus prefer the pruned tree.
+
+-----------------
+
+## Your turn
+
+Using the original tree `tree.carseats`, perform 5-fold Cross-validation to determine the best size of the tree:
+```{r}
+# Codes start here
+
+```
+
+Calculate the test error rate:
+```{r}
+# Codes start here:
+
+# Test set is Carseats.test
+
+```
+
+-----------------
+Credit: Adopted from *An Introduction to Statistical Learning* by *Gareth James, Daniela Witten, Trevor Hastie and Robert Tibshirani*
+
+This lab material can be used for academic purposes only. 
+
+
+
+[^1]: Note: The reason why we have to exclude `Sales` from the explanatory variables is that the response (`High`) is derived from it.
