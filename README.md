@@ -3,6 +3,19 @@ Welcome to my workspace! I'm Kunxiao, an undergrad data science student studying
 
 This portfolio is mainly used to collect and back up my main work and study documents, including but not limited to learning materials, lab codes, project outcomes, and so on. All files shown here are allowed to download for any proper use. For any file containing group works or collaborations, the display permits are obtained with the clear citation to each contributor. The briefly description of each file will be summarized below for easier access, but the description will not go into details since the main purpose of this page is to record my learning progress for personal use.
 
+## Capstone project Amgen
+This file includes all the works of the Capstone project assignment with Amgen Company. 
+
+### Brief background introduction: 
+
+-   Our project essentially benchmarks the performance of the NER task using this specific type of model on free text coming from published articles and research papers on FierceBiotech.com. So far in our project, we have gotten through the initial task of NER; although, moving forward, we can work towards the competition of an algorithm which produces a Knowledge Graph from free text by additionally completing the NEL task and RE task.
+-   Knowledge Graph (KG): a network model that links together named entities ('nodes') based on some common relation ('edge')
+-   Named Entity Recognition (NER): training a model to parse unstructured text and classify named entities of a particular class.
+
+### Methodology:
+
+-   BERT (Bidirectional Encoder Representations from Transformers): a state-of-the-art Transformer-based language model most prominently used by Google to process search inquiries. Distinguished from other Transformer models by weighing the context on either side of each word in the input to better infer the meaning of each specific word in the input.
+-   To obtain an entity-recognition model, we trained PubMedBERT on the BioRed dataset. To test how applicable the model is, we labeled a novel dataset filled with abstracts and news articles and tested our model on it.
 
 ## Capstone project biomarkers-group9
 This file includes all the works of the Capstone project assignment in group 9: biomarkers. 
