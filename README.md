@@ -97,6 +97,20 @@ The final outcomes: `Kunxiao Gao Final Project-HTML.Rmd` and `Kunxiao Gao Final 
 
 All the details are included in the project file.
 
+## Internship Glodon
+
+This file includes all the works in the internship at Glodon. 
+
+### Brief background introduction:
+
+Aimed to predict customer purchasing behavior and provide customer data with high purchasing power.
+
+### Methodology
+
+-   Classification methods used to train the models: `XGBoosting` Model; Optimization methods: `Randomized Search` and `Bayesian Optimization`;  Data Binning techniques: `One-hot`,`woe`, `iv`; Dimension reduction techniques (`PCA`) for reducing dimension; Visualization techniques to visualize results: `ROC` and `K-S Curve`.
+-   Wrote fuzzy matching algorithm and aggregation back-tracking algorithm to clean and explore the data.
+-   Implemented XGBoosting model with Randomized Search and Bayesian Optimization to train model and fine tuned the parameters, acquiring the best model base on 65.893 AUC.
+
 ## Internship Web crawling
 
 This file includes all the works about web crawling in the internship at China Unicom. 
