@@ -6,9 +6,15 @@ This portfolio is mainly used to collect and back up my main work and study docu
 Sample work which could be show without any sensitive or private data. 
 
 ### Brief background introduction: 
-
+During my internship at Glodon, I worked on leveraging machine learning and data analysis techniques to optimize Building Information Modeling (BIM) processes. My primary focus was on developing predictive models to identify potential project risks, improving efficiency and decision-making for construction management.
 ### Methodology:
-
+-   Data Collection and Preprocessing: Analyzed large-scale construction datasets, performed cleaning, and handled missing values to ensure data quality.
+-   Feature Engineering: Identified key variables influencing project risks, such as timeline deviations and budget discrepancies, using domain-specific insights.
+Model Development:
+-   Built predictive models using Random Forests and Gradient Boosting Machines (GBMs) to predict project risks.
+-   Compared traditional machine learning methods with deep learning models, such as feed-forward neural networks, to evaluate performance.
+-   Validation and Optimization: Conducted cross-validation to ensure model robustness and fine-tuned hyperparameters to maximize accuracy and reliability.
+-   Visualization and Reporting: Created dashboards and visualizations using Python libraries (e.g., matplotlib, seaborn) to present findings to cross-functional teams, including engineers and architects.
 ## Capstone project Amgen
 This file includes all the works of the Capstone project assignment with Amgen Company. 
 
