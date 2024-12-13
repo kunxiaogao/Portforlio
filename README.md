@@ -1,4 +1,4 @@
-# Portforlio
+# Portfolio
 Welcome to my workspace! I'm Kunxiao, a master student in DS studying at JHU. I graduated from UC-Santa Barbara and majored in Stats and Data Science.
 
 This portfolio is mainly used to collect and back up my main work and study documents, including but not limited to learning materials, lab codes, project outcomes, and so on. All files shown here are allowed to download for any proper use. For any file containing group works or collaborations, the display permits are obtained with the clear citation to each contributor. The briefly description of each file will be summarized below for easier access, but the description will not go into details since the main purpose of this page is to record my learning progress for personal use.
