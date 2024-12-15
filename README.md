@@ -1,7 +1,11 @@
 # Portfolio
 Welcome to my workspace! I'm Kunxiao, a master student in DS studying at JHU. I graduated from UC-Santa Barbara and majored in Stats and Data Science.
 
-This portfolio is mainly used to collect and back up my main work and study documents, including but not limited to learning materials, lab codes, project outcomes, and so on. All files shown here are allowed to download for any proper use. For any file containing group works or collaborations, the display permits are obtained with the clear citation to each contributor. The briefly description of each file will be summarized below for easier access, but the description will not go into details since the main purpose of this page is to record my learning progress for personal use.
+This portfolio is mainly used to collect and back up my sample of work, including but not limited to research paper, sample codes, posters, presentations and so on. All files shown here are allowed to download for any proper use. For any file containing group works or collaborations, the display permits are obtained with the clear citation to each contributor. The briefly description of each file will be summarized below for easier access, but the description will not go into details since the main purpose of this page is to record my learning progress for personal use.
+## Identifying Early Markers of AD with Language and Speech pattern
+Sample paper to be submitted is included in this folder.
+Code is still in process to be collated and uploaded soon.
+
 ## Internship in Glodon, Beijing
 Sample work which could be show without any sensitive or private data. 
 
