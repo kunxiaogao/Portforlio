@@ -6,6 +6,9 @@ This portfolio is mainly used to collect and back up my sample of work, includin
 Sample paper to be submitted is included in this folder.
 Code is still in process to be collated and uploaded soon.
 
+## GNN Efficiency Improvements by Using Graph Sampling Strategies
+Sample paper and poster to be submitted is included in this folder.
+Some sample code is updated.
 ## Internship in Glodon, Beijing
 Sample work which could be show without any sensitive or private data. 
 
