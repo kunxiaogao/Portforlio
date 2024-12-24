@@ -10,6 +10,9 @@ The objective of my research on Alzheimer's Disease (AD) is to develop advanced 
 - Code is still in process to be collated and uploaded soon.
 
 ## GNN Efficiency Improvements by Using Graph Sampling Strategies
+- Introduction and Method:
+
+In this project, I developed a Graph Neural Network (GNN) model tailored for correlation network prediction, focusing on optimizing computational efficiency without sacrificing predictive accuracy. I employed graph signal sampling techniques, such as highest leverage scores and adapted BFS, to construct a smaller, representative graph while preserving essential structural information. The GNN was trained on the reduced graph and validated for convergence using mathematical derivations with a Graph Shift Operator (GSO) on the full dataset. To ensure rigorous performance, I derived error bounds using Lipschitz continuous graphons, proving that sampling top nodes based on leverage scores significantly enhances convergence compared to uniform random sampling. The model demonstrated impressive predictive accuracy, achieving a Mean Squared Error (MSE) of 0.30, which was 26.8% lower than traditional methods. This innovative approach reduced computational costs while maintaining almost equal performance to models trained on the original graph, showcasing the potential of well-sampled smaller graphs in practical GNN applications.
 - Sample paper and poster to be submitted is included in this folder.
 - Some sample code is updated.
 
