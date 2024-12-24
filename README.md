@@ -17,6 +17,9 @@ In this project, I developed a Graph Neural Network (GNN) model tailored for cor
 - Some sample code is updated.
 
 ## Machine Learning in Medical Applications
+- Introduction and method:
+
+In the Machine Learning in Medical Applications (MLMA) course, I developed a classification model for harmful brain activity using EEG and spectrogram data from the Harvard Challenge, achieving an impressive accuracy of 86.04%. To improve data visualization and interpretability, I converted raw EEG signals into spectrograms and organized electrode data into four panels, applying Fourier Transforms for clearer signal representation.To address variability in EEG signals, I implemented ResNet and EfficientNet with Multiple Instance Learning (MIL), dividing each EEG embedding into four horizontal windows. This innovative approach treated each window as a distinct instance within the dataset, enabling the model to detect meaningful patterns across different portions of the signal. EfficientNet, in particular, proved effective for capturing multi-scale information, providing a robust solution for complex EEG data.
 - Some sample code is updated.
 - Sample presentation is included in this folder.
 
