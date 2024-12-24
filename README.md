@@ -24,6 +24,8 @@ In the Machine Learning in Medical Applications (MLMA) course, I developed a cla
 - Sample presentation is included in this folder.
 
 ## Machine Translation
+- Introduction and Method:
+In my Machine Translation course, I developed a deep understanding of the foundational techniques behind modern translation systems. I explored neural machine translation (NMT) architectures, focusing on optimizing performance for low-resource languages. By experimenting with transformer-based models, I delved into techniques like beam search optimization and attention mechanisms, which are central to improving translation quality and fluency. Additionally, I incorporated Monte Carlo methods to enhance beam search efficiency, enabling the model to prioritize more contextually relevant translations. This approach demonstrated significant improvements in both translation accuracy and computational efficiency. The experience not only honed my technical skills in natural language processing but also reinforced my interest in building scalable and adaptable language models to bridge communication gaps across diverse linguistic and cultural contexts.
 - Sample peper is included.
 ## Internship in Glodon, Beijing
 Sample work which could be show without any sensitive or private data. 
