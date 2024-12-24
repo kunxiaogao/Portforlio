@@ -13,6 +13,9 @@ This portfolio is mainly used to collect and back up my sample of work, includin
 ## Machine Learning in Medical Applications
 - Some sample code is updated.
 - Sample presentation is included in this folder.
+
+## Machine Translation
+- Sample peper is included.
 ## Internship in Glodon, Beijing
 Sample work which could be show without any sensitive or private data. 
 
